@@ -220,9 +220,9 @@ const CoursesPage: React.FC = () => {
                     {subject.isEnglish && <CourseBadge color="#E5E2FD">영어 강의</CourseBadge>}
                     <CourseBadge color="#F8F8F8">현재 {subject.currentStudents}명 수강</CourseBadge>
                     {subject.note && (
-                      <CourseNote>
-                        <strong>비고:</strong> {subject.note}
-                      </CourseNote>
+                      <CourseBadge color="#FDE2E2">
+                        {subject.note}
+                      </CourseBadge>
                     )}
                   </CourseBadges>
                 </CourseBody>
@@ -517,17 +517,6 @@ const CourseBadge = styled.div<{ color: string }>`
   background-color: ${props => props.color};
   padding: 4px 8px;
   border-radius: 4px;
-`;
-
-const CourseNote = styled.div`
-  font-family: ${props => props.theme.typography.T7.fontFamily};
-  font-size: ${props => props.theme.typography.T7.fontSize};
-  color: ${props => props.theme.colors.gray[600]};
-  background-color: ${props => props.theme.colors.red[100]};
-  padding: 8px;
-  border-radius: 4px;
-  margin-top: 8px;
-  line-height: 1.4;
 `;
 
 const CourseFooter = styled.div`

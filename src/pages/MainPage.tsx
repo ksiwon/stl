@@ -250,7 +250,7 @@ const MainPage: React.FC = () => {
           {/* 개설 과목 목록 */}
           <CourseSection>
             <CourseSectionHeader>
-              <h3>개설 과목 목록</h3>
+              <h3>개설 과목</h3>
               <SearchInput 
                 placeholder="과목명, 교수명, 과목코드 검색..." 
                 value={searchQuery}
@@ -359,6 +359,7 @@ const PageContainer = styled.div`
 
 const LeftSection = styled.div`
   flex: 3;
+  min-width: 400px;
 `;
 
 const RightSection = styled.div`
@@ -654,11 +655,12 @@ const CourseSectionHeader = styled.div`
   margin-bottom: 16px;
 
   h3 {
+    flex-shrink: 0;
     font-family: ${props => props.theme.typography.T4.fontFamily};
     font-size: ${props => props.theme.typography.T4.fontSize};
     font-weight: ${props => props.theme.typography.T4.fontWeight};
     color: ${props => props.theme.colors.black};
-    margin: 0;
+    margin-right: 8px;
   }
 `;
 

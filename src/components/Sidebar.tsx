@@ -83,7 +83,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeItem, onMenuItemClick }) => {
 };
 
 const SidebarContainer = styled.div`
-  width: 200px;
+  width: 160px;
   background-color: ${props => props.theme.colors.white};
   border-right: 1px solid ${props => props.theme.colors.gray[200]};
 `;
