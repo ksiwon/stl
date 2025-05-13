@@ -11,6 +11,8 @@
 # production
 /build
 
+/otl_crawl/chromedriver.exe
+
 # misc
 .DS_Store
 .env.local
