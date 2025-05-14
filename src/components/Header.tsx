@@ -1,7 +1,7 @@
 // components/Header.tsx
 import React, { useState, useRef, useEffect } from 'react';
 import styled from 'styled-components';
-import { FiSettings, FiUser, FiShare2, FiChevronDown } from 'react-icons/fi';
+import { FiUser, FiChevronDown, FiInfo } from 'react-icons/fi';
 import { useSemester } from '../contexts/SemesterContext';
 
 const Header: React.FC = () => {
@@ -64,11 +64,8 @@ const Header: React.FC = () => {
           )}
         </SemesterDropdown>
         <Divider />
-        <ActionButton>
-          <FiShare2 size={18} />
-        </ActionButton>
-        <ActionButton>
-          <FiSettings size={18} />
+        <ActionButton onClick={() => window.open('https://github.com/ksiwon/stl', '_blank')}>
+          <FiInfo size={18} />
         </ActionButton>
         <ActionButton>
           <FiUser size={18} />

@@ -4,7 +4,7 @@ import styled from 'styled-components';
 import { FiCalendar, FiList, FiBookOpen, FiBarChart2, FiStar } from 'react-icons/fi';
 import { useNavigate } from 'react-router-dom';
 
-export type MenuItemType = 'timetable' | 'courses' | 'aiSuggest' | 'analytics' | 'saved';
+export type MenuItemType = 'timetable' | 'courses' | 'Suggest' | 'aiMaker' | 'saved';
 
 interface SidebarProps {
   activeItem: MenuItemType;
@@ -27,11 +27,11 @@ const Sidebar: React.FC<SidebarProps> = ({ activeItem, onMenuItemClick }) => {
       case 'courses':
         navigate('/courses');
         break;
-      case 'aiSuggest':
-        navigate('/ai-suggest');
+      case 'Suggest':
+        navigate('/suggest');
         break;
-      case 'analytics':
-        navigate('/analytics');
+      case 'aiMaker':
+        navigate('/aiMaker');
         break;
       case 'saved':
         navigate('/saved');
@@ -57,18 +57,18 @@ const Sidebar: React.FC<SidebarProps> = ({ activeItem, onMenuItemClick }) => {
           <span>Courses</span>
         </MenuItem>
         <MenuItem 
-          active={activeItem === 'aiSuggest'} 
-          onClick={() => handleItemClick('aiSuggest')}
+          active={activeItem === 'Suggest'} 
+          onClick={() => handleItemClick('Suggest')}
         >
           <FiBookOpen size={18} />
-          <span>AI Suggest</span>
+          <span>Suggest</span>
         </MenuItem>
         <MenuItem 
-          active={activeItem === 'analytics'} 
-          onClick={() => handleItemClick('analytics')}
+          active={activeItem === 'aiMaker'} 
+          onClick={() => handleItemClick('aiMaker')}
         >
           <FiBarChart2 size={18} />
-          <span>Analytics</span>
+          <span>AI Maker</span>
         </MenuItem>
         <MenuItem 
           active={activeItem === 'saved'} 
