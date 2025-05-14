@@ -12,6 +12,7 @@
 /build
 
 /otl_crawl/chromedriver.exe
+.env
 
 # misc
 .DS_Store

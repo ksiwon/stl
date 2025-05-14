@@ -1,6 +1,76 @@
 // src/utils/subjectUtils.ts
 import { Subject, Schedule, departmentColors, defaultColor } from '../types/subject';
 import subjectData from '../data/subjectData.json';
+import coursesData from '../data/coursesData.json';
+import reviewData from '../data/reviewData.json';
+
+// 리뷰 데이터 타입 정의
+export interface Review {
+  강의명: string;
+  강의코드: string;
+  교수명: string;
+  학기: string;
+  리뷰내용: string;
+  평점: {
+    recommendation: string;
+    grade: string;
+    workload: string;
+    teaching: string;
+  };
+}
+
+// 코스 데이터 타입 정의
+export interface CourseInfo {
+  과목명: string;
+  과목코드: string;
+  학과: string;
+  구분: string;
+  설명: string;
+}
+
+// 평점 타입 정의
+export interface Rating {
+  gradeScore: number;
+  workloadScore: number;
+  teachingScore: number;
+  recommendationScore: number;
+  grade: string;
+  workload: string;
+  teaching: string;
+  reviewCount: number;
+}
+
+// 평점 변환 함수
+export const convertGradeToNumber = (grade: string): number => {
+  switch (grade) {
+    case 'A+': return 4.3;
+    case 'A': return 4.0;
+    case 'A-': return 3.7;
+    case 'B+': return 3.3;
+    case 'B': return 3.0;
+    case 'B-': return 2.7;
+    case 'C+': return 2.3;
+    case 'C': return 2.0;
+    case 'C-': return 1.7;
+    case 'D+': return 1.3;
+    case 'D': return 1.0;
+    case 'F': return 0.0;
+    default: return 0.0;
+  }
+};
+
+// 숫자를 학점으로 변환
+export const convertNumberToGrade = (score: number): string => {
+  if (score >= 3.7) return 'A+';
+  if (score >= 3.3) return 'A';
+  if (score >= 3.0) return 'B+';
+  if (score >= 2.7) return 'B';
+  if (score >= 2.3) return 'C+';
+  if (score >= 2.0) return 'C';
+  if (score >= 1.5) return 'D+';
+  if (score >= 1.0) return 'D';
+  return 'F';
+};
 
 // 시간 형식 변환 (HH:MM -> 분)
 export const parseTimeToMinutes = (timeStr: string): number => {
@@ -59,7 +129,60 @@ export const parseCredits = (creditsStr: string): number => {
   return parseFloat(match[3]);
 };
 
-// 교과목 데이터 변환 (수정된 부분)
+// 과목 리뷰 계산
+export const calculateSubjectRating = (subject: Subject): Rating | null => {
+  // 과목 코드와 교수명이 동일한 리뷰 찾기
+  const matchingReviews = (reviewData as Review[]).filter(
+    review => review.강의코드 === subject.code && review.교수명 === subject.professor
+  );
+  
+  if (matchingReviews.length === 0) {
+    return null;
+  }
+  
+  let totalGrade = 0;
+  let totalWorkload = 0;
+  let totalTeaching = 0;
+  let totalRecommendation = 0;
+  
+  matchingReviews.forEach(review => {
+    totalGrade += convertGradeToNumber(review.평점.grade);
+    totalWorkload += convertGradeToNumber(review.평점.workload);
+    totalTeaching += convertGradeToNumber(review.평점.teaching);
+    totalRecommendation += parseInt(review.평점.recommendation) || 0;
+  });
+  
+  const avgGrade = totalGrade / matchingReviews.length;
+  const avgWorkload = totalWorkload / matchingReviews.length;
+  const avgTeaching = totalTeaching / matchingReviews.length;
+  const avgRecommendation = totalRecommendation / matchingReviews.length;
+  
+  return {
+    gradeScore: avgGrade,
+    workloadScore: avgWorkload,
+    teachingScore: avgTeaching,
+    recommendationScore: avgRecommendation,
+    grade: convertNumberToGrade(avgGrade),
+    workload: convertNumberToGrade(avgWorkload),
+    teaching: convertNumberToGrade(avgTeaching),
+    reviewCount: matchingReviews.length
+  };
+};
+
+// 과목 설명 가져오기
+export const getCourseDescription = (code: string): string => {
+  const course = (coursesData as CourseInfo[]).find(c => c.과목코드 === code);
+  return course ? course.설명 : '설명이 없습니다.';
+};
+
+// 과목별 리뷰 가져오기
+export const getSubjectReviews = (code: string, professor: string): Review[] => {
+  return (reviewData as Review[]).filter(
+    review => review.강의코드 === code && review.교수명 === professor
+  );
+};
+
+// 교과목 데이터 변환
 export const processSubjectData = (): Subject[] => {
   // subjectData가 배열인지 확인
   if (!Array.isArray(subjectData)) {
@@ -101,6 +224,28 @@ export const processSubjectData = (): Subject[] => {
 // 과목 색상 가져오기
 export const getSubjectColor = (subject: Subject): string => {
   return departmentColors[subject.department] || defaultColor;
+};
+
+// 평점 색상 가져오기
+export const getRatingColor = (grade: string): string => {
+  switch (grade) {
+    case 'A+':
+    case 'A':
+      return '#2E7D32'; // 녹색
+    case 'B+':
+    case 'B':
+      return '#1976D2'; // 파란색
+    case 'C+':
+    case 'C':
+      return '#F57C00'; // 주황색
+    case 'D+':
+    case 'D':
+      return '#D32F2F'; // 빨간색
+    case 'F':
+      return '#7B1FA2'; // 보라색
+    default:
+      return '#757575'; // 회색
+  }
 };
 
 // 시간 형식 변환 (분 -> HH:MM)
@@ -226,26 +371,6 @@ export const getFilterOptions = (subjects: Subject[]) => {
   return {
     departments: uniqueDepartments,
     categories: uniqueCategories
-  };
-};
-
-// 시간표에서 위치 계산하기 위한 함수
-export const getSchedulePosition = (schedule: Schedule) => {
-  const startTime = schedule.startTime;
-  const endTime = schedule.endTime;
-  
-  // 9시부터 시작하는 상대적 시간 계산
-  const startFromNine = startTime - (9 * 60);
-  const duration = endTime - startTime;
-  
-  // 30분 단위로 행 계산
-  const startRow = Math.floor(startFromNine / 30) + 2; // +2는 헤더 행 고려
-  const spanRows = Math.ceil(duration / 30);
-  
-  // 결과 반환
-  return {
-    gridColumn: `${schedule.day + 2}`, // 첫 번째 열은 시간
-    gridRow: `${startRow} / span ${spanRows}`,
   };
 };
 
