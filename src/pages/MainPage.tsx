@@ -1,6 +1,7 @@
 // src/pages/MainPage.tsx
 import React, { useState, useEffect, useRef } from 'react';
-import { FiX, FiPlus, FiInfo, FiClock, FiUser, FiMapPin, FiStar, FiActivity, FiBookOpen } from 'react-icons/fi';
+import { FiX, FiPlus, FiInfo, FiClock, FiUser, FiMapPin, FiStar, FiActivity, FiBookOpen, FiDownload, FiShare } from 'react-icons/fi';
+import { toPng, toBlob } from 'html-to-image';
 import Layout from '../components/Layout';
 import { MenuItemType } from '../components/Sidebar';
 import { Subject } from '../types/subject';
@@ -32,6 +33,7 @@ const MainPage: React.FC = () => {
   const days = ['월', '화', '수', '목', '금'];
   const hours = Array.from({ length: 15 }, (_, i) => 9 + i); // 9시부터 23시까지
   const timetableGridRef = useRef<HTMLDivElement>(null);
+  const timetableWrapperRef = useRef<HTMLDivElement>(null);
   const [gridDimensions, setGridDimensions] = useState({ width: 0, timeColWidth: 70 });
 
   // 학기 Context 사용
@@ -40,6 +42,170 @@ const MainPage: React.FC = () => {
   // 모달 상태
   const [selectedSubject, setSelectedSubject] = useState<Subject | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+
+  // 토스트 메시지 표시 함수
+  const showToast = (message: string, type: 'success' | 'error' | 'warning' = 'success') => {
+    const toast = document.createElement('div');
+    toast.textContent = message;
+    
+    const colors = {
+      success: { bg: '#10B981', text: '#ffffff' },
+      error: { bg: '#EF4444', text: '#ffffff' },
+      warning: { bg: '#F59E0B', text: '#ffffff' }
+    };
+    
+    toast.style.cssText = `
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background: ${colors[type].bg};
+      color: ${colors[type].text};
+      padding: 12px 16px;
+      border-radius: 4px;
+      z-index: 1000;
+      font-family: Pretendard, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      animation: slideInRight 0.3s ease-out;
+    `;
+    
+    // 애니메이션 추가
+    const style = document.createElement('style');
+    style.textContent = `
+      @keyframes slideInRight {
+        from {
+          transform: translateX(100%);
+          opacity: 0;
+        }
+        to {
+          transform: translateX(0);
+          opacity: 1;
+        }
+      }
+      @keyframes slideOutRight {
+        from {
+          transform: translateX(0);
+          opacity: 1;
+        }
+        to {
+          transform: translateX(100%);
+          opacity: 0;
+        }
+      }
+    `;
+    if (!document.head.querySelector('style[data-toast-animations]')) {
+      style.setAttribute('data-toast-animations', 'true');
+      document.head.appendChild(style);
+    }
+    
+    document.body.appendChild(toast);
+    
+    // 3초 후 제거
+    setTimeout(() => {
+      if (document.body.contains(toast)) {
+        toast.style.animation = 'slideOutRight 0.3s ease-in';
+        setTimeout(() => {
+          if (document.body.contains(toast)) {
+            document.body.removeChild(toast);
+          }
+        }, 300);
+      }
+    }, 3000);
+  };
+
+  // PNG로 저장하는 함수
+  const handleSaveTimetable = async () => {
+    if (!timetableWrapperRef.current) return;
+
+    try {
+      showToast('시간표를 저장하는 중...', 'success');
+
+      const dataUrl = await toPng(timetableWrapperRef.current, {
+        cacheBust: true,
+        filter: (node) => {
+          // HTMLElement인 경우에만 classList 검사
+          if (node instanceof HTMLElement) {
+            return (
+              !node.classList.contains('remove-button') &&
+              !node.classList.contains('tooltip')
+            );
+          }
+          // 텍스트 노드 등은 그대로 렌더
+          return true;
+        },
+      });
+
+      const link = document.createElement('a');
+      link.download = `시간표_${currentSemester}_${new Date()
+        .toISOString()
+        .slice(0, 10)}.png`;
+      link.href = dataUrl;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      showToast('시간표가 저장되었습니다!', 'success');
+    } catch (error) {
+      console.error('저장 중 오류:', error);
+      showToast('시간표 저장에 실패했습니다.', 'error');
+    }
+  };
+
+  // 클립보드에 복사하는 함수
+  const handleCopyTimetable = async () => {
+    if (!timetableWrapperRef.current) return;
+
+    try {
+      showToast('시간표를 복사하는 중...', 'success');
+
+      const blob = await toBlob(timetableWrapperRef.current, {
+        cacheBust: true,
+        filter: (node) => {
+          if (node instanceof HTMLElement) {
+            return (
+              !node.classList.contains('remove-button') &&
+              !node.classList.contains('tooltip')
+            );
+          }
+          return true;
+        },
+      });
+      if (!blob) throw new Error('이미지 생성 실패');
+
+      await navigator.clipboard.write([
+        new ClipboardItem({ 'image/png': blob }),
+      ]);
+      showToast('클립보드에 복사되었습니다!', 'success');
+    } catch (error) {
+      console.error('복사 중 오류:', error);
+      showToast('복사에 실패했습니다. 다운로드로 저장합니다.', 'warning');
+
+      // 대체 다운로드 로직
+      try {
+        const dataUrl = await toPng(timetableWrapperRef.current, {
+          cacheBust: true,
+          filter: (node) => {
+            if (node instanceof HTMLElement) {
+              return (
+                !node.classList.contains('remove-button') &&
+                !node.classList.contains('tooltip')
+              );
+            }
+            return true;
+          },
+        });
+        const link = document.createElement('a');
+        link.download = `시간표_${currentSemester}_${new Date()
+          .toISOString()
+          .slice(0, 10)}.png`;
+        link.href = dataUrl;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      } catch (e) {
+        console.error('다운로드 실패:', e);
+      }
+    }
+  };
 
   // 모든 과목 데이터 로드
   useEffect(() => {
@@ -132,13 +298,19 @@ const MainPage: React.FC = () => {
                 <span>{totalCredits} 학점</span>
               </CreditsInfo>
               <ActionButtons>
-                <TimetableButton>저장</TimetableButton>
-                <TimetableButton>내보내기</TimetableButton>
+                <TimetableButton onClick={handleSaveTimetable}>
+                  <FiDownload size={16} />
+                  저장
+                </TimetableButton>
+                <TimetableButton onClick={handleCopyTimetable}>
+                  <FiShare size={16} />
+                  공유
+                </TimetableButton>
               </ActionButtons>
             </TimetableHeader>
 
-            {/* 시간표 그리드와 과목 블록 - 기존 코드 유지 */}
-            <TimetableWrapper>
+            {/* 시간표 그리드와 과목 블록 */}
+            <TimetableWrapper ref={timetableWrapperRef}>
               <TimetableGrid ref={timetableGridRef}>
                 {/* 헤더 */}
                 <TimeHeader>시간/요일</TimeHeader>
@@ -161,21 +333,23 @@ const MainPage: React.FC = () => {
                 ))}
               </TimetableGrid>
 
-              {/* 과목 블록 - 기존 코드 유지 */}
+              {/* 과목 블록 */}
               {selectedSubjects.map(subject => (
                 subject.schedules.map((schedule, index) => {
                   const dayIndex = schedule.day;
-                  const startFromNine = schedule.startTime - (9 * 60);
-                  const duration = schedule.endTime - schedule.startTime;
+                  const startFromNine = schedule.startTime - (9 * 60); // 9시부터의 분 차이
+                  const duration = schedule.endTime - schedule.startTime; // 지속 시간 (분)
                   
                   // 다섯 개 요일 칸 너비 계산
                   const dayColumnWidth = (gridDimensions.width - gridDimensions.timeColWidth) / 5;
                   
-                  // 요일 칸 시작 위치 계산
+                  // 요일 칸 시작 위치 계산 (시간 칸 너비 + 해당 요일 위치)
                   const left = gridDimensions.timeColWidth + (dayIndex * dayColumnWidth);
                   
-                  // 나머지 계산은 동일
-                  const top = (startFromNine / 30) * 30 + 30;
+                  // 상단 위치 계산: 헤더(30px) + (9시부터의 분/30분 단위) * 30px
+                  const top = 30 + (startFromNine / 30) * 30;
+                  
+                  // 높이 계산: (지속 시간/30분 단위) * 30px
                   const height = (duration / 30) * 30;
                   
                   return (
@@ -197,12 +371,15 @@ const MainPage: React.FC = () => {
                       <CourseName>{subject.name}</CourseName>
                       <CourseProfessor>{subject.professor}</CourseProfessor>
                       <CourseRoom>{subject.classroom}</CourseRoom>
-                      <RemoveButton onClick={(e) => {
-                        e.stopPropagation();
-                        e.preventDefault();
-                        setHoveredSubject(null);
-                        removeSubject(subject.id);
-                      }}>
+                      <RemoveButton 
+                        className="remove-button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          e.preventDefault();
+                          setHoveredSubject(null);
+                          removeSubject(subject.id);
+                        }}
+                      >
                         <FiX size={14} />
                       </RemoveButton>
                     </CourseBlock>
@@ -211,9 +388,9 @@ const MainPage: React.FC = () => {
               ))}
             </TimetableWrapper>
 
-            {/* 툴팁 - 기존 코드 유지 */}
+            {/* 툴팁 */}
             {hoveredSubject && (
-              <SubjectTooltip>
+              <SubjectTooltip className="tooltip">
                 <TooltipHeader>
                   <span>{hoveredSubject.code}</span>
                   <span>{hoveredSubject.section}분반</span>
@@ -353,7 +530,7 @@ const MainPage: React.FC = () => {
             </CourseList>
           </CourseSection>
 
-          {/* 내 수업 목록 - 개설 과목 목록 아래에 배치 */}
+          {/* 내 수업 목록 */}
           <SelectedCoursesSection>
             <SelectedCoursesSectionHeader>
               <h3>내 수업 목록</h3>
@@ -618,7 +795,7 @@ const MainPage: React.FC = () => {
   );
 };
 
-// Styled Components
+// Styled Components - Theme 적용
 const PageContainer = styled.div`
   display: flex;
   gap: 24px;
@@ -685,34 +862,65 @@ const ActionButtons = styled.div`
 `;
 
 const TimetableButton = styled.button`
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-family: ${props => props.theme.typography.T6.fontFamily};
   font-size: ${props => props.theme.typography.T6.fontSize};
   font-weight: ${props => props.theme.typography.T6.fontWeight};
   background-color: ${props => props.theme.colors.white};
   color: ${props => props.theme.colors.primary};
   border: 1px solid ${props => props.theme.colors.primary};
-  border-radius: 4px;
-  padding: 6px 12px;
+  border-radius: 6px;
+  padding: 8px 14px;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.2s ease;
+  position: relative;
+  overflow: hidden;
 
   &:hover {
     background-color: ${props => props.theme.colors.purple[100]};
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(163, 50, 255, 0.2);
+  }
+
+  &:active {
+    transform: translateY(0);
+  }
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
   }
 `;
 
-// 시간표 래퍼 추가 - 상대 위치 컨테이너
 const TimetableWrapper = styled.div`
   position: relative;
   width: 100%;
   height: auto;
+  background-color: ${props => props.theme.colors.white};
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  
+  /* 캡처 모드일 때 깔끔한 스타일 */
+  &.capture-mode {
+    border: 1px solid ${props => props.theme.colors.gray[200]};
+    
+    .remove-button {
+      display: none !important;
+    }
+    
+    .tooltip {
+      display: none !important;
+    }
+  }
 `;
 
-// 시간표 그리드 - 기본 구조 유지
 const TimetableGrid = styled.div`
   display: grid;
   grid-template-columns: 70px repeat(5, 1fr);
-  grid-auto-rows: 30px; // 30분 간격으로 행 높이 설정
+  grid-auto-rows: 30px; // 각 행이 30px (30분 단위)
   background-color: ${props => props.theme.colors.white};
   border: 1px solid ${props => props.theme.colors.gray[200]};
   border-radius: 8px;
@@ -766,7 +974,6 @@ const GridCell = styled.div`
   border-bottom: 1px solid ${props => props.theme.colors.gray[200]};
 `;
 
-// CourseBlock 스타일 수정 - 절대 위치로 변경
 const CourseBlock = styled.div<{ color: string }>`
   background-color: ${props => props.color || props.theme.colors.purple[100]};
   border-left: 3px solid ${props => props.theme.colors.primary};
@@ -913,7 +1120,7 @@ const CourseSection = styled.div`
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
   display: flex;
   flex-direction: column;
-  max-height: 60vh; // 화면 높이의 60%로 제한
+  max-height: 60vh;
 `;
 
 const CourseSectionHeader = styled.div`
@@ -954,7 +1161,7 @@ const CourseList = styled.div`
   flex: 1;
   overflow-y: auto;
   padding-right: 8px;
-  max-height: 60vh; // 화면 높이의 60%로 제한
+  max-height: 60vh;
 
   &::-webkit-scrollbar {
     width: 6px;
@@ -1036,6 +1243,120 @@ const CourseSchedule = styled.div`
   display: inline-block;
 `;
 
+const CourseDescription = styled.div`
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 12px;
+  margin-bottom: 12px;
+  font-family: ${props => props.theme.typography.T7.fontFamily};
+  font-size: ${props => props.theme.typography.T7.fontSize};
+  color: ${props => props.theme.colors.gray[600]};
+  line-height: 1.4;
+  
+  svg {
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+  
+  span {
+    flex: 1;
+  }
+`;
+
+const RatingSection = styled.div`
+  margin: 12px 0;
+  background-color: ${props => props.theme.colors.gray[100]};
+  padding: 8px;
+  border-radius: 4px;
+`;
+
+const RatingTitle = styled.div`
+  font-family: ${props => props.theme.typography.T7.fontFamily};
+  font-size: ${props => props.theme.typography.T7.fontSize};
+  font-weight: 600;
+  color: ${props => props.theme.colors.gray[600]};
+  margin-bottom: 6px;
+`;
+
+const RatingGrid = styled.div`
+  display: flex;
+  gap: 12px;
+`;
+
+const RatingItem = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+`;
+
+const RatingLabel = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-family: ${props => props.theme.typography.T7.fontFamily};
+  font-size: ${props => props.theme.typography.T7.fontSize};
+  color: ${props => props.theme.colors.gray[600]};
+`;
+
+const RatingValue = styled.div<{ color: string }>`
+  font-family: ${props => props.theme.typography.T7.fontFamily};
+  font-size: ${props => props.theme.typography.T7.fontSize};
+  font-weight: 600;
+  color: ${props => props.color};
+`;
+
+const ButtonGroup = styled.div`
+  display: flex;
+  gap: 8px;
+  width: 100%;
+`;
+
+const MoreButton = styled.button`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background-color: ${props => props.theme.colors.white};
+  color: ${props => props.theme.colors.gray[600]};
+  border: 1px solid ${props => props.theme.colors.gray[300]};
+  border-radius: 4px;
+  font-family: ${props => props.theme.typography.T6.fontFamily};
+  font-size: ${props => props.theme.typography.T6.fontSize};
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  flex: 1;
+
+  &:hover {
+    background-color: ${props => props.theme.colors.gray[100]};
+  }
+`;
+
+const AddButton = styled.button`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 12px;
+  font-family: ${props => props.theme.typography.T6.fontFamily};
+  font-size: ${props => props.theme.typography.T6.fontSize};
+  font-weight: 600;
+  background-color: ${props => props.theme.colors.purple[100]};
+  color: ${props => props.theme.colors.primary};
+  border: 1px solid ${props => props.theme.colors.primary};
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+  flex: 1;
+
+  &:hover {
+    background-color: ${props => props.theme.colors.primary};
+    color: ${props => props.theme.colors.white};
+  }
+`;
+
 const EmptyState = styled.div`
   display: flex;
   justify-content: center;
@@ -1083,7 +1404,7 @@ const SelectedCoursesCount = styled.div`
 `;
 
 const SelectedCoursesList = styled.div`
-  max-height: 60vh; // 화면 높이의 60%로 제한
+  max-height: 60vh;
   overflow-y: auto;
 
   &::-webkit-scrollbar {
@@ -1198,6 +1519,111 @@ const EmptySelectedCourses = styled.div`
   font-family: ${props => props.theme.typography.T6.fontFamily};
   font-size: ${props => props.theme.typography.T6.fontSize};
   color: ${props => props.theme.colors.gray[600]};
+`;
+
+const RatingRow = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+`;
+
+const RatingValueInline = styled.span<{ color: string }>`
+  font-family: ${props => props.theme.typography.T6.fontFamily};
+  font-size: ${props => props.theme.typography.T6.fontSize};
+  font-weight: 600;
+  color: ${props => props.color};
+  margin-right: 14px;
+`;
+
+// 모달 관련 스타일
+const Modal = styled.div`
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+`;
+
+const ModalOverlay = styled.div`
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+`;
+
+const ModalContent = styled.div`
+  position: relative;
+  background-color: ${props => props.theme.colors.white};
+  width: 90%;
+  max-width: 800px;
+  max-height: 90vh;
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  z-index: 101;
+`;
+
+const ModalHeader = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 24px;
+  border-bottom: 1px solid ${props => props.theme.colors.gray[200]};
+`;
+
+const ModalTitle = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  
+  span:first-child {
+    font-family: ${props => props.theme.typography.T5.fontFamily};
+    font-size: ${props => props.theme.typography.T5.fontSize};
+    font-weight: 600;
+    color: ${props => props.theme.colors.primary};
+  }
+  
+  span:last-child {
+    font-family: ${props => props.theme.typography.T3.fontFamily};
+    font-size: ${props => props.theme.typography.T3.fontSize};
+    font-weight: 600;
+    color: ${props => props.theme.colors.black};
+  }
+`;
+
+const CloseButton = styled.button`
+  background: none;
+  border: none;
+  color: ${props => props.theme.colors.gray[600]};
+  cursor: pointer;
+  padding: 4px;
+  
+  &:hover {
+    color: ${props => props.theme.colors.black};
+  }
+`;
+
+const ModalBody = styled.div`
+  padding: 24px;
+  overflow-y: auto;
+  max-height: calc(90vh - 200px);
+`;
+
+const ModalFooter = styled.div`
+  padding: 16px 24px;
+  border-top: 1px solid ${props => props.theme.colors.gray[200]};
+  display: flex;
+  justify-content: flex-end;
 `;
 
 const CourseInfoSection = styled.div`
@@ -1389,229 +1815,6 @@ const AddButtonLarge = styled.button`
 
   &:hover {
     background-color: #8A2BD9;
-  }
-`;
-
-// 같은 줄에 표시하기 위한 평점 행
-const RatingRow = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 16px;
-  flex-wrap: wrap;
-`;
-
-const RatingValueInline = styled.span<{ color: string }>`
-  font-family: ${props => props.theme.typography.T6.fontFamily};
-  font-size: ${props => props.theme.typography.T6.fontSize};
-  font-weight: 600;
-  color: ${props => props.color};
-  margin-right: 14px;
-`;
-
-// 평점 관련 스타일
-const RatingSection = styled.div`
-  margin: 12px 0;
-  background-color: ${props => props.theme.colors.gray[100]};
-  padding: 8px;
-  border-radius: 4px;
-`;
-
-const RatingTitle = styled.div`
-  font-family: ${props => props.theme.typography.T7.fontFamily};
-  font-size: ${props => props.theme.typography.T7.fontSize};
-  font-weight: 600;
-  color: ${props => props.theme.colors.gray[600]};
-  margin-bottom: 6px;
-`;
-
-const RatingGrid = styled.div`
-  display: flex;
-  gap: 12px;
-`;
-
-const RatingItem = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-`;
-
-const RatingLabel = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-family: ${props => props.theme.typography.T7.fontFamily};
-  font-size: ${props => props.theme.typography.T7.fontSize};
-  color: ${props => props.theme.colors.gray[600]};
-`;
-
-const RatingValue = styled.div<{ color: string }>`
-  font-family: ${props => props.theme.typography.T7.fontFamily};
-  font-size: ${props => props.theme.typography.T7.fontSize};
-  font-weight: 600;
-  color: ${props => props.color};
-`;
-
-// 버튼 그룹
-const ButtonGroup = styled.div`
-  display: flex;
-  gap: 8px;
-  width: 100%;
-`;
-
-const MoreButton = styled.button`
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 8px 12px;
-  background-color: ${props => props.theme.colors.white};
-  color: ${props => props.theme.colors.gray[600]};
-  border: 1px solid ${props => props.theme.colors.gray[300]};
-  border-radius: 4px;
-  font-family: ${props => props.theme.typography.T6.fontFamily};
-  font-size: ${props => props.theme.typography.T6.fontSize};
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-  flex: 1; // 동일한 flex 값으로 같은 너비 지정
-
-  &:hover {
-    background-color: ${props => props.theme.colors.gray[100]};
-  }
-`;
-
-const AddButton = styled.button`
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 8px 12px;
-  font-family: ${props => props.theme.typography.T6.fontFamily};
-  font-size: ${props => props.theme.typography.T6.fontSize};
-  font-weight: 600;
-  background-color: ${props => props.theme.colors.purple[100]};
-  color: ${props => props.theme.colors.primary};
-  border: 1px solid ${props => props.theme.colors.primary};
-  border-radius: 4px;
-  cursor: pointer;
-  transition: all 0.2s;
-  flex: 1; // 동일한 flex 값으로 같은 너비 지정
-
-  &:hover {
-    background-color: ${props => props.theme.colors.primary};
-    color: ${props => props.theme.colors.white};
-  }
-`;
-
-// 모달 관련 스타일
-const Modal = styled.div`
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 100;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-`;
-
-const ModalOverlay = styled.div`
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: rgba(0, 0, 0, 0.5);
-`;
-
-const ModalContent = styled.div`
-  position: relative;
-  background-color: ${props => props.theme.colors.white};
-  width: 90%;
-  max-width: 800px;
-  max-height: 90vh;
-  border-radius: 8px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  z-index: 101;
-`;
-
-const ModalHeader = styled.div`
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 16px 24px;
-  border-bottom: 1px solid ${props => props.theme.colors.gray[200]};
-`;
-
-const ModalTitle = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  
-  span:first-child {
-    font-family: ${props => props.theme.typography.T5.fontFamily};
-    font-size: ${props => props.theme.typography.T5.fontSize};
-    font-weight: 600;
-    color: ${props => props.theme.colors.primary};
-  }
-  
-  span:last-child {
-    font-family: ${props => props.theme.typography.T3.fontFamily};
-    font-size: ${props => props.theme.typography.T3.fontSize};
-    font-weight: 600;
-    color: ${props => props.theme.colors.black};
-  }
-`;
-
-const CloseButton = styled.button`
-  background: none;
-  border: none;
-  color: ${props => props.theme.colors.gray[600]};
-  cursor: pointer;
-  padding: 4px;
-  
-  &:hover {
-    color: ${props => props.theme.colors.black};
-  }
-`;
-
-const ModalBody = styled.div`
-  padding: 24px;
-  overflow-y: auto;
-  max-height: calc(90vh - 200px);
-`;
-
-const ModalFooter = styled.div`
-  padding: 16px 24px;
-  border-top: 1px solid ${props => props.theme.colors.gray[200]};
-  display: flex;
-  justify-content: flex-end;
-`;
-
-// 과목 설명 스타일
-const CourseDescription = styled.div`
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  margin-top: 12px;
-  margin-bottom: 12px;
-  font-family: ${props => props.theme.typography.T7.fontFamily};
-  font-size: ${props => props.theme.typography.T7.fontSize};
-  color: ${props => props.theme.colors.gray[600]};
-  line-height: 1.4;
-  
-  svg {
-    flex-shrink: 0;
-    margin-top: 2px;
-  }
-  
-  span {
-    flex: 1;
   }
 `;
 

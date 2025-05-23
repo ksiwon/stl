@@ -1,4 +1,4 @@
-// src/pages/AiMakerPage.tsx
+// src/pages/AiMakerPage.tsx - 백엔드 서버 없이 OpenAI 직접 호출
 import React, { useState, useEffect, useRef } from 'react';
 import styled from 'styled-components';
 import { FiSend, FiRefreshCw, FiDownload, FiCpu, FiUser, FiBook, FiClock, FiMapPin, FiInfo, FiStar, FiActivity, FiBookOpen, FiPlus, FiX, FiCheckCircle } from 'react-icons/fi';
@@ -28,6 +28,10 @@ interface RecommendationResult {
   subjects: Subject[];
   explanation: string;
 }
+
+// OpenAI API 설정
+const OPENAI_API_KEY = process.env.REACT_APP_OPENAI_API_KEY;
+const VECTOR_STORE_ID = process.env.REACT_APP_VECTOR_STORE_ID;
 
 const AiMakerPage: React.FC = () => {
   const [activeMenuItem, setActiveMenuItem] = useState<MenuItemType>('aiMaker');
@@ -108,6 +112,97 @@ const AiMakerPage: React.FC = () => {
   const handleMenuItemClick = (item: MenuItemType) => {
     setActiveMenuItem(item);
   };
+
+  // OpenAI API 직접 호출 함수
+  const callOpenAI = async (messages: Message[], subjects: Subject[], semester: string) => {
+    if (!OPENAI_API_KEY) {
+      throw new Error('OpenAI API 키가 설정되지 않았습니다. .env 파일에 REACT_APP_OPENAI_API_KEY를 설정해주세요.');
+    }
+
+    // 현재 학기에 존재하는 과목 코드 목록 및 정보 생성
+    const availableCourses = subjects.map(subject => ({
+      code: subject.code,
+      name: subject.name,
+      credits: subject.credits,
+      professor: subject.professor,
+      schedules: subject.schedules.map(s => 
+        `${['월', '화', '수', '목', '금'][s.day]}(${Math.floor(s.startTime/60)}:${s.startTime%60 || '00'}-${Math.floor(s.endTime/60)}:${s.endTime%60 || '00'})`
+      ).join(', '),
+      // 권장 학년 추출
+      yearRecommended: subject.code.match(/\.(\d)/)?.[1] || '?'
+    }));
+
+    // 시스템 메시지 생성
+    const systemMessage = {
+      role: "system" as const,
+      content: `당신은 대학생의 시간표 작성을 도와주는 AI 어시스턴트입니다.
+현재 학기는 ${semester}입니다.
+사용자의 전공, 학년, 듣고 싶은 수업, 오전 수업 선호 여부, 영어 강의 여부, 원하는 총 학점 등을 파악하고 최적의 시간표를 추천해주세요.
+
+중요: 벡터 스토어 ID: ${VECTOR_STORE_ID}에 저장된 과목 정보, 과목 리뷰, 강의 평가 정보를 참고하여 사용자에 대한 맞춤형 추천을 제공해야 합니다.
+중요: 시간표 추천 시 반드시 실제 정확한 과목 정보만 사용해야 합니다.
+
+만약 이해가 되지 않는 단어가 있다면, ${VECTOR_STORE_ID}에 저장된 과목 정보와 과목 리뷰를 참고하여 해당 단어의 의미를 파악하고 답변하세요.
+학과에 대한 약어가 발견된다면, 전체 학과 명단을 참고하여 약어의 글자가 학과 이름에 전부 들어가있는 곳을 찾아 해당 학과로 인지하세요. ex) 산디 = 산업디자인학과
+한 학년은 두 학기로 구성되어 있습니다. ex) 5학기 = 3학년 1학기
+
+다음 규칙을 철저히 지켜주세요:
+1. 현재 학기에 실제로 개설된 과목만 추천해야 합니다.
+2. 과목 코드는 "알파벳.숫자" 형식이며, 숫자의 첫 자리는 해당 과목이 권장되는 학년을 의미합니다.
+   예: CS.10001은 1학년, CS.20001은 2학년, CS.30001은 3학년, CS.40001은 4학년에게 권장되는 과목입니다.
+   학생의 학년에 맞는 과목을 우선적으로 추천하세요.
+3. 학생의 전공이 ${VECTOR_STORE_ID}에 저장된 과목 정보 중 개설학과와 일치하는 과목을 우선적으로 추천하세요.
+4. 과목 코드를 대괄호로 묶어서 표시하세요. 예: [CS.20004]
+5. 절대로 존재하지 않는 과목 정보를 만들어내지 마세요. 반드시 ${VECTOR_STORE_ID}에 저장된 과목 정보 중 ${semester}에 개설된 과목만 사용해야 합니다.
+6. 아래 제공된 정확한 정보만 사용해야 합니다.
+7. 최종적으로 시간표를 다 작성했다면, 시간들이 겹치지 않는지 확인하세요.
+8. 만약 한 과목에 대해 여러 교수님이 계시다면, ${VECTOR_STORE_ID}에 저장된 각 교수님 별 리뷰 내용과 grade, workload, teaching을 고려하여 추천하세요.
+
+최종 답변을 제시할 때는 반드시 다음 형식으로 작성하세요:
+
+추천 시간표:
+1. [CS.10001] 프로그래밍 기초 (3학점) - 월, 수 10:00-11:15 (교수: 홍길동)
+2. [MAS.10001] 미적분학 1 (3학점) - 화, 목 13:00-14:15 (교수: 이순신)
+3. [HSS.30101] 대학영어 (2학점) - 금 9:00-10:50 (교수: 강감찬)
+
+이렇게 과목 코드를 정확히 대괄호로 표시하고, 각 과목의 학점과 시간을 명확히 명시해주세요.
+그리고 가장 마지막으로 확정된 최종적인 추천 시간표만 제시하세요.
+
+현재 학기(${semester})에 개설된 과목 목록과 정확한 정보입니다. 반드시 이 정보대로 추천해주세요:
+
+${availableCourses.map(course => 
+  `- [${course.code}] ${course.name} (${course.credits}학점, ${course.yearRecommended}학년 권장, 교수: ${course.professor}) - ${course.schedules}`
+).join('\n')}
+`
+    };
+
+    // 최종 메시지 배열 생성
+    const finalMessages = [systemMessage, ...messages];
+
+    console.log('Calling OpenAI API directly...');
+    
+    // OpenAI API 직접 호출
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${OPENAI_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: 'gpt-4.1-mini',
+        messages: finalMessages,
+        temperature: 0.7,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(`OpenAI API 요청 실패: ${response.status} ${response.statusText} - ${errorData.error?.message || 'Unknown error'}`);
+    }
+
+    const data = await response.json();
+    return data.choices[0].message.content || '';
+  };
   
   // 메시지 전송 핸들러
   const handleSendMessage = async () => {
@@ -127,57 +222,26 @@ const AiMakerPage: React.FC = () => {
       // 메시지 배열에서 시스템 메시지를 제외한 메시지만 보내기
       const messagesToSend = [...messages.filter(msg => msg.role !== 'system'), userMessage];
       
-      // 필수 정보만 포함하는 과목 데이터 생성
-      const essentialSubjectData = filteredSubjectsBySemester.map(subject => ({
-        id: subject.id,
-        code: subject.code,
-        name: subject.name,
-        professor: subject.professor,
-        credits: subject.credits,
-        schedules: subject.schedules,
-      }));
+      console.log('Sending OpenAI API request...');
       
-      console.log('Sending API request...');
+      // OpenAI API 직접 호출
+      const assistantMessage = await callOpenAI(messagesToSend, filteredSubjectsBySemester, currentSemester);
       
-      // 백엔드 서버로 요청 전송
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          messages: messagesToSend,
-          subjects: essentialSubjectData,
-          semester: currentSemester
-        }),
-      });
-      
-      if (!response.ok) {
-        console.error('API 응답 에러:', response.status, response.statusText);
-        throw new Error(`API 요청 실패: ${response.status} ${response.statusText}`);
-      }
-      
-      const data = await response.json();
-      console.log('API 응답 데이터:', data);
+      console.log('OpenAI 응답 데이터:', assistantMessage);
       
       // 응답 메시지 추가
       setMessages(prev => [...prev, {
         role: 'assistant',
-        content: data.message
+        content: assistantMessage
       }]);
       
-      // 추천 결과 처리 - 서버에서 전달된 recommendation 객체가 있는지 확인
-      if (data.recommendation && data.recommendation.subjects && data.recommendation.subjects.length > 0) {
-        console.log('서버에서 추천 과목 찾음:', data.recommendation.subjects.length);
-        setRecommendationResult(data.recommendation);
-      } 
-      // 서버에서 recommendation 객체가 없는 경우, 클라이언트에서 직접 파싱 시도
-      else if (data.message.includes('추천 시간표') || data.message.includes('추천 과목')) {
-        console.log('서버 추천 없음, 클라이언트에서 파싱 시도');
+      // 추천 결과 처리 - 메시지에서 과목 코드 추출
+      if (assistantMessage.includes('추천 시간표') || assistantMessage.includes('추천 과목')) {
+        console.log('추천 시간표 관련 응답, 과목 코드 추출 시도');
         
         // 메시지에서 과목 코드 추출
-        const recommendedCodes = parseRecommendedCourses(data.message);
-        console.log('클라이언트에서 추출한 과목 코드:', recommendedCodes);
+        const recommendedCodes = parseRecommendedCourses(assistantMessage);
+        console.log('추출한 과목 코드:', recommendedCodes);
         
         if (recommendedCodes.length > 0) {
           // 과목 코드와 일치하는 과목 찾기
@@ -185,13 +249,13 @@ const AiMakerPage: React.FC = () => {
             recommendedCodes.includes(subject.code)
           );
           
-          console.log('클라이언트에서 찾은 추천 과목:', recommendedSubjects.length);
+          console.log('찾은 추천 과목:', recommendedSubjects.length);
           
           if (recommendedSubjects.length > 0) {
             // 추천 결과 설정
             setRecommendationResult({
               subjects: recommendedSubjects,
-              explanation: data.message
+              explanation: assistantMessage
             });
           } else {
             console.warn('추천 과목을 찾았으나 실제 과목과 매칭되지 않음');
@@ -206,7 +270,7 @@ const AiMakerPage: React.FC = () => {
       console.error('메시지 전송 중 오류 발생:', error);
       setMessages(prev => [...prev, {
         role: 'assistant',
-        content: '죄송합니다. 요청을 처리하는 중에 오류가 발생했습니다. 다시 시도해 주세요.'
+        content: `죄송합니다. 요청을 처리하는 중에 오류가 발생했습니다: ${error instanceof Error ? error.message : '알 수 없는 오류'}`
       }]);
     } finally {
       setIsLoading(false);
@@ -215,6 +279,23 @@ const AiMakerPage: React.FC = () => {
 
   // 클라이언트 측 과목 코드 추출 함수
   function parseRecommendedCourses(message: string): string[] {
+    console.log('메시지에서 과목 코드 추출 시도...');
+    
+    // 대괄호로 둘러싸인 과목 코드 패턴 (예: [CS.12345])
+    const bracketCodeRegex = /\[([A-Z]{2,3}\.[0-9]{5})\]/g;
+    let bracketMatches: string[] = [];
+    let bracketMatch: RegExpExecArray | null;
+    
+    while ((bracketMatch = bracketCodeRegex.exec(message)) !== null) {
+      bracketMatches.push(bracketMatch[1]);
+    }
+    
+    // 대괄호로 둘러싸인 과목 코드가 있으면 우선 사용
+    if (bracketMatches.length > 0) {
+      console.log('대괄호로 표시된 과목 코드:', bracketMatches);
+      return bracketMatches.filter((code, index) => bracketMatches.indexOf(code) === index);
+    }
+    
     // 굵은 텍스트 안에 있는 과목 코드 패턴 (예: **CS.12345**)
     const boldCodeRegex = /\*\*([A-Z]{2,3}\.[0-9]{5})\*\*/g;
     let boldMatches: string[] = [];
@@ -227,8 +308,9 @@ const AiMakerPage: React.FC = () => {
       boldMatches.push(boldMatch[1]);
     }
     
-    // 굵은 텍스트로 표시된 과목 코드가 있으면 우선 사용
+    // 굵은 텍스트로 표시된 과목 코드가 있으면 사용
     if (boldMatches.length > 0) {
+      console.log('굵은 텍스트로 표시된 과목 코드:', boldMatches);
       return boldMatches.filter((code, index) => boldMatches.indexOf(code) === index);
     }
     
@@ -238,6 +320,7 @@ const AiMakerPage: React.FC = () => {
     
     // 일반 패턴으로 찾은 경우
     if (matches && matches.length > 0) {
+      console.log('일반 패턴으로 찾은 과목 코드:', matches);
       return matches.filter((code, index) => matches.indexOf(code) === index);
     }
     
@@ -256,12 +339,14 @@ const AiMakerPage: React.FC = () => {
     }
     
     if (looseMatches.length > 0) {
+      console.log('느슨한 패턴으로 찾은 과목 코드:', looseMatches);
       return looseMatches.filter((code, index) => looseMatches.indexOf(code) === index);
     }
     
     // 그래도 못 찾은 경우 빈 배열 반환
+    console.log('과목 코드를 찾을 수 없음');
     return [];
-  };
+  }
   
   // 과목 추가 핸들러
   const handleAddSubject = (subject: Subject) => {
@@ -684,7 +769,7 @@ const AiMakerPage: React.FC = () => {
   );
 };
 
-// 스타일 컴포넌트
+// 스타일 컴포넌트들 (이전과 동일)
 const PageContainer = styled.div`
   display: flex;
   flex-direction: column;
@@ -871,7 +956,6 @@ const RecommendationSection = styled.div`
   margin-bottom: 32px;
 `;
 
-// 섹션 헤더 (제목과 버튼을 가로로 배치)
 const SectionHeader = styled.div`
   display: flex;
   justify-content: space-between;
@@ -890,7 +974,6 @@ const SectionTitle = styled.h3`
   margin: 0;
 `;
 
-// AI 추천 과목만 추가하는 버튼
 const PerfectMatchButton = styled.button`
   display: flex;
   align-items: center;
@@ -1049,7 +1132,6 @@ const AddButton = styled.button`
   }
 `;
 
-// Rating related styles
 const RatingSection = styled.div`
   margin: 12px 0;
   background-color: ${props => props.theme.colors.gray[100]};

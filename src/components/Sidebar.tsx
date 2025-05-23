@@ -50,6 +50,13 @@ const Sidebar: React.FC<SidebarProps> = ({ activeItem, onMenuItemClick }) => {
           <span>Timetable</span>
         </MenuItem>
         <MenuItem 
+          active={activeItem === 'aiMaker'} 
+          onClick={() => handleItemClick('aiMaker')}
+        >
+          <FiBarChart2 size={18} />
+          <span>⭐AI Maker</span>
+        </MenuItem>
+        <MenuItem 
           active={activeItem === 'courses'} 
           onClick={() => handleItemClick('courses')}
         >
@@ -57,6 +64,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeItem, onMenuItemClick }) => {
           <span>Courses</span>
         </MenuItem>
         <MenuItem 
+          style={{color: 'lightgray'}}
           active={activeItem === 'Suggest'} 
           onClick={() => handleItemClick('Suggest')}
         >
@@ -64,13 +72,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeItem, onMenuItemClick }) => {
           <span>Suggest</span>
         </MenuItem>
         <MenuItem 
-          active={activeItem === 'aiMaker'} 
-          onClick={() => handleItemClick('aiMaker')}
-        >
-          <FiBarChart2 size={18} />
-          <span>AI Maker</span>
-        </MenuItem>
-        <MenuItem 
+          style={{color: 'lightgray'}}
           active={activeItem === 'saved'} 
           onClick={() => handleItemClick('saved')}
         >
@@ -97,7 +99,7 @@ const MenuItems = styled.ul`
 const MenuItem = styled.li<{ active?: boolean }>`
   display: flex;
   align-items: center;
-  padding: 12px 20px;
+  padding: 12px 16px;
   font-family: ${props => props.theme.typography.T5.fontFamily};
   font-size: ${props => props.theme.typography.T5.fontSize};
   font-weight: ${props => props.active ? 600 : 500};
