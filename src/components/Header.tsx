@@ -12,9 +12,7 @@ const Header: React.FC = () => {
   // 학기 목록
   const semesters = [
     'Spring 2025',
-    'Summer 2025',
-    'Fall 2025',
-    'Winter 2025'
+    'Summer 2025'
   ];
 
   // 드롭다운 외부 클릭 시 닫기
