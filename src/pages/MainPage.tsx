@@ -42,6 +42,7 @@ const MainPage: React.FC = () => {
   // 모달 상태
   const [selectedSubject, setSelectedSubject] = useState<Subject | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [showSurveyPopup, setShowSurveyPopup] = useState(true);
 
   // 토스트 메시지 표시 함수
   const showToast = (message: string, type: 'success' | 'error' | 'warning' = 'success') => {
@@ -245,6 +246,18 @@ const MainPage: React.FC = () => {
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  const handleCloseSurveyPopup = (dontShowAgain = false) => {
+    setShowSurveyPopup(false);
+    if (dontShowAgain) {
+      localStorage.setItem('stl-survey-seen', 'true');
+    }
+  };
+
+  const handleGoToSurvey = () => {
+    window.open('https://forms.gle/6nN4QEw9mA4hx2jR7', '_blank');
+    handleCloseSurveyPopup(true);
+  };
 
   // 메뉴 아이템 클릭 핸들러
   const handleMenuItemClick = (item: MenuItemType) => {
@@ -621,6 +634,52 @@ const MainPage: React.FC = () => {
             )}
           </SelectedCoursesSection>
         </RightSection>
+
+        {showSurveyPopup && (
+          <SurveyPopup>
+            <SurveyPopupOverlay onClick={() => handleCloseSurveyPopup()} />
+            <SurveyPopupContent>
+              <SurveyPopupHeader>
+                <SurveyPopupTitle>STL 프로젝트에 오신 것을 환영합니다! 🎉</SurveyPopupTitle>
+                <SurveyPopupCloseButton onClick={() => handleCloseSurveyPopup()}>
+                  <FiX size={20} />
+                </SurveyPopupCloseButton>
+              </SurveyPopupHeader>
+              
+              <SurveyPopupBody>
+                <SurveyPopupText>
+                  안녕하세요, STL 개발자 <SurveyPopupHighlight>22학번 박정원</SurveyPopupHighlight>입니다.
+                </SurveyPopupText>
+                <SurveyPopupText>
+                  STL(Siwon's Timetable Linker)은 <SurveyPopupHighlight>[ID430] AI Human Behavior 수업의 개인 프로젝트</SurveyPopupHighlight>로, 
+                  AI가 자동으로 시간표를 만들어주는 플랫폼입니다.
+                </SurveyPopupText>
+                
+                <SurveyPopupText>
+                  매 학기마다 OTL 후기 비교하고, 포탈에서 개설 과목 하나하나 찾아보느라 시간표 짜기 정말 번거롭지 않으셨나요? 
+                  이 문제를 해결하고자 STL 프로젝트를 시작했습니다!
+                </SurveyPopupText>
+                
+                <SurveyPopupDivider />
+                
+                <SurveyPopupText>
+                  👉 해당 설문은 STL 서비스를 사용해본 후 간단한 피드백을 받기 위한 것입니다.<br />
+                  👉 <SurveyPopupHighlight>모든 응답은 익명으로 처리되며</SurveyPopupHighlight>, 서비스 개선에만 활용됩니다.
+                </SurveyPopupText>
+                
+                <SurveyPopupText>
+                  <SurveyPopupHighlight>5분 내외</SurveyPopupHighlight>로 작성 가능하니, 많은 참여 부탁드립니다! 😊 감사합니다!
+                </SurveyPopupText>
+              </SurveyPopupBody>
+              
+              <SurveyPopupFooter>
+                <SurveyPopupButtonPrimary onClick={handleGoToSurvey}>
+                  설문 참여하기
+                </SurveyPopupButtonPrimary>
+              </SurveyPopupFooter>
+            </SurveyPopupContent>
+          </SurveyPopup>
+        )}
 
         {/* 리뷰 상세 모달 */}
         {isModalOpen && selectedSubject && (
@@ -1815,6 +1874,138 @@ const AddButtonLarge = styled.button`
 
   &:hover {
     background-color: #8A2BD9;
+  }
+`;
+
+const SurveyPopup = styled.div`
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+`;
+
+const SurveyPopupOverlay = styled.div`
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+`;
+
+const SurveyPopupContent = styled.div`
+  position: relative;
+  background-color: ${props => props.theme.colors.white};
+  width: 90%;
+  max-width: 600px;
+  max-height: 80vh;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(163, 50, 255, 0.2);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  z-index: 201;
+  border: 2px solid ${props => props.theme.colors.purple[100]};
+`;
+
+const SurveyPopupHeader = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px;
+  background: linear-gradient(135deg, ${props => props.theme.colors.primary}, #8A2BD9);
+  color: ${props => props.theme.colors.white};
+`;
+
+const SurveyPopupTitle = styled.h2`
+  font-family: ${props => props.theme.typography.T3.fontFamily};
+  font-size: ${props => props.theme.typography.T3.fontSize};
+  font-weight: ${props => props.theme.typography.T3.fontWeight};
+  margin: 0;
+  color: ${props => props.theme.colors.white};
+`;
+
+const SurveyPopupCloseButton = styled.button`
+  background: none;
+  border: none;
+  color: ${props => props.theme.colors.white};
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  transition: background-color 0.2s;
+  
+  &:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+  }
+`;
+
+const SurveyPopupBody = styled.div`
+  padding: 24px;
+  overflow-y: auto;
+  flex: 1;
+`;
+
+const SurveyPopupText = styled.p`
+  font-family: ${props => props.theme.typography.T6.fontFamily};
+  font-size: ${props => props.theme.typography.T6.fontSize};
+  font-weight: ${props => props.theme.typography.T6.fontWeight};
+  line-height: ${props => props.theme.typography.T6.lineHeight};
+  color: ${props => props.theme.colors.black};
+  margin: 0 0 16px 0;
+  
+  &:last-child {
+    margin-bottom: 0;
+  }
+`;
+
+const SurveyPopupHighlight = styled.span`
+  font-weight: 600;
+  color: ${props => props.theme.colors.primary};
+`;
+
+const SurveyPopupDivider = styled.div`
+  width: 100%;
+  height: 1px;
+  background-color: ${props => props.theme.colors.gray[200]};
+  margin: 20px 0;
+`;
+
+const SurveyPopupFooter = styled.div`
+  padding: 20px 24px;
+  border-top: 1px solid ${props => props.theme.colors.gray[200]};
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  background-color: ${props => props.theme.colors.gray[100]};
+`;
+
+const SurveyPopupButtonPrimary = styled.button`
+  padding: 10px 20px;
+  font-family: ${props => props.theme.typography.T6.fontFamily};
+  font-size: ${props => props.theme.typography.T6.fontSize};
+  font-weight: 600;
+  background-color: ${props => props.theme.colors.primary};
+  color: ${props => props.theme.colors.white};
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 2px 4px rgba(163, 50, 255, 0.3);
+
+  &:hover {
+    background-color: #8A2BD9;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(163, 50, 255, 0.4);
+  }
+
+  &:active {
+    transform: translateY(0);
   }
 `;
 

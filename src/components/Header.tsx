@@ -1,7 +1,7 @@
 // components/Header.tsx
 import React, { useState, useRef, useEffect } from 'react';
 import styled from 'styled-components';
-import { FiUser, FiChevronDown, FiInfo } from 'react-icons/fi';
+import { FiUser, FiChevronDown, FiInfo, FiTrello } from 'react-icons/fi';
 import { useSemester } from '../contexts/SemesterContext';
 
 const Header: React.FC = () => {
@@ -35,6 +35,10 @@ const Header: React.FC = () => {
     setIsDropdownOpen(false);
   };
 
+  const handleProfile = () => {
+    alert('아직 DB가 구현되지 않아 로그인 기능이 없습니다... ㅠㅠ\n\n시간표 저장 및 복사는 가능하니, 따로 저장해주시길 바랍니다!');
+  };
+
   return (
     <HeaderContainer>
       <LogoSection>
@@ -62,10 +66,13 @@ const Header: React.FC = () => {
           )}
         </SemesterDropdown>
         <Divider />
+        <ActionButton onClick={() => window.open('https://forms.gle/6nN4QEw9mA4hx2jR7', '_blank')}>
+          <FiTrello size={18} />
+        </ActionButton>
         <ActionButton onClick={() => window.open('https://github.com/ksiwon/stl', '_blank')}>
           <FiInfo size={18} />
         </ActionButton>
-        <ActionButton>
+        <ActionButton onClick={handleProfile}>
           <FiUser size={18} />
         </ActionButton>
       </MenuSection>
