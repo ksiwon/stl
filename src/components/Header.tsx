@@ -69,7 +69,7 @@ const Header: React.FC = () => {
         <ActionButton onClick={() => window.open('https://forms.gle/6nN4QEw9mA4hx2jR7', '_blank')}>
           <FiTrello size={18} />
         </ActionButton>
-        <ActionButton onClick={() => window.open('https://github.com/ksiwon/stl', '_blank')}>
+        <ActionButton onClick={() => window.open('https://www.siwon.site', '_blank')}>
           <FiInfo size={18} />
         </ActionButton>
         <ActionButton onClick={handleProfile}>
