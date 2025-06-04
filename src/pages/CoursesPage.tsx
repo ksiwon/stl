@@ -33,6 +33,10 @@ const CoursesPage: React.FC = () => {
   const [categoryFilterOpen, setCategoryFilterOpen] = useState(false);
   const [languageFilterOpen, setLanguageFilterOpen] = useState(false);
   
+  // 페이지네이션 상태 추가
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 30;
+  
   const [departments, setDepartments] = useState<string[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
 
@@ -73,6 +77,7 @@ const CoursesPage: React.FC = () => {
   // 검색 핸들러
   const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
     setSearchQuery(e.target.value);
+    setCurrentPage(1); // 검색 시 페이지 리셋
   };
 
   // 필터 초기화
@@ -81,6 +86,7 @@ const CoursesPage: React.FC = () => {
     setCategory('All');
     setIsEnglish(undefined);
     setSearchQuery('');
+    setCurrentPage(1); // 필터 초기화 시 페이지 리셋
     // 모든 드롭다운 닫기
     setDepartmentFilterOpen(false);
     setCategoryFilterOpen(false);
@@ -113,11 +119,37 @@ const CoursesPage: React.FC = () => {
   };
 
   // 검색 결과 필터링 - 현재 학기 과목 중에서만 검색 및 필터링
-  const filteredSubjects = searchSubjects(filteredSubjectsBySemester, searchQuery, {
+  const allFilteredSubjects = searchSubjects(filteredSubjectsBySemester, searchQuery, {
     department,
     category,
     isEnglish
   });
+
+  // 페이지네이션 계산
+  const totalPages = Math.ceil(allFilteredSubjects.length / ITEMS_PER_PAGE);
+  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+  const endIndex = startIndex + ITEMS_PER_PAGE;
+  const currentPageSubjects = allFilteredSubjects.slice(startIndex, endIndex);
+
+  // 페이지 변경 핸들러
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+    // 페이지 변경 시 스크롤을 상단으로 이동
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  // 페이지 번호 배열 생성 (최대 5개 페이지 표시)
+  const getVisiblePages = () => {
+    const maxVisible = 5;
+    let start = Math.max(1, currentPage - Math.floor(maxVisible / 2));
+    let end = Math.min(totalPages, start + maxVisible - 1);
+    
+    if (end - start + 1 < maxVisible) {
+      start = Math.max(1, end - maxVisible + 1);
+    }
+    
+    return Array.from({ length: end - start + 1 }, (_, i) => start + i);
+  };
 
   // 과목 추가 핸들러 (실제 구현에서는 시간표에 추가하는 로직 필요)
   const handleAddCourse = (subject: Subject) => {
@@ -183,6 +215,7 @@ const CoursesPage: React.FC = () => {
                         selected={department === dept}
                         onClick={() => {
                           setDepartment(dept);
+                          setCurrentPage(1); // 필터 변경 시 페이지 리셋
                           setDepartmentFilterOpen(false);
                         }}
                       >
@@ -222,6 +255,7 @@ const CoursesPage: React.FC = () => {
                         selected={category === cat}
                         onClick={() => {
                           setCategory(cat);
+                          setCurrentPage(1); // 필터 변경 시 페이지 리셋
                           setCategoryFilterOpen(false);
                         }}
                       >
@@ -259,6 +293,7 @@ const CoursesPage: React.FC = () => {
                       selected={isEnglish === undefined}
                       onClick={() => {
                         setIsEnglish(undefined);
+                        setCurrentPage(1); // 필터 변경 시 페이지 리셋
                         setLanguageFilterOpen(false);
                       }}
                     >
@@ -269,6 +304,7 @@ const CoursesPage: React.FC = () => {
                       selected={isEnglish === true}
                       onClick={() => {
                         setIsEnglish(true);
+                        setCurrentPage(1); // 필터 변경 시 페이지 리셋
                         setLanguageFilterOpen(false);
                       }}
                     >
@@ -279,6 +315,7 @@ const CoursesPage: React.FC = () => {
                       selected={isEnglish === false}
                       onClick={() => {
                         setIsEnglish(false);
+                        setCurrentPage(1); // 필터 변경 시 페이지 리셋
                         setLanguageFilterOpen(false);
                       }}
                     >
@@ -301,15 +338,18 @@ const CoursesPage: React.FC = () => {
         </SearchFilterSection>
         
         <ResultsInfo>
-          총 <strong>{filteredSubjects.length}</strong>개 과목
+          총 <strong>{allFilteredSubjects.length}</strong>개 과목
           {department !== 'All' && <FilterTag>{department}</FilterTag>}
           {category !== 'All' && <FilterTag>{category}</FilterTag>}
           {isEnglish !== undefined && <FilterTag>{isEnglish ? '영어 강의' : '한국어 강의'}</FilterTag>}
+          {totalPages > 1 && (
+            <span> (페이지 {currentPage} / {totalPages})</span>
+          )}
         </ResultsInfo>
         
         <CoursesGrid>
-          {filteredSubjects.length > 0 ? (
-            filteredSubjects.map(subject => {
+          {currentPageSubjects.length > 0 ? (
+            currentPageSubjects.map(subject => {
               // 리뷰 평점 데이터 가져오기
               const rating = calculateSubjectRating(subject);
               
@@ -429,6 +469,47 @@ const CoursesPage: React.FC = () => {
             </EmptyState>
           )}
         </CoursesGrid>
+
+        {/* 페이지네이션 */}
+        {totalPages > 1 && (
+          <PaginationContainer>
+            <PaginationButton
+              onClick={() => handlePageChange(1)}
+              disabled={currentPage === 1}
+            >
+              처음
+            </PaginationButton>
+            <PaginationButton
+              onClick={() => handlePageChange(currentPage - 1)}
+              disabled={currentPage === 1}
+            >
+              이전
+            </PaginationButton>
+            
+            {getVisiblePages().map(page => (
+              <PaginationButton
+                key={page}
+                onClick={() => handlePageChange(page)}
+                active={currentPage === page}
+              >
+                {page}
+              </PaginationButton>
+            ))}
+            
+            <PaginationButton
+              onClick={() => handlePageChange(currentPage + 1)}
+              disabled={currentPage === totalPages}
+            >
+              다음
+            </PaginationButton>
+            <PaginationButton
+              onClick={() => handlePageChange(totalPages)}
+              disabled={currentPage === totalPages}
+            >
+              마지막
+            </PaginationButton>
+          </PaginationContainer>
+        )}
         
         {/* 리뷰 상세 모달 */}
         {isModalOpen && selectedSubject && (
@@ -1340,6 +1421,71 @@ const RatingValueInline = styled.span<{ color: string }>`
   font-weight: 600;
   color: ${props => props.color};
   margin-right: 14px;
+`;
+
+// 페이지네이션 스타일
+const PaginationContainer = styled.div`
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  margin-top: 32px;
+  padding: 24px 0;
+`;
+
+const PaginationButton = styled.button<{ active?: boolean }>`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 40px;
+  height: 40px;
+  padding: 0 12px;
+  font-family: ${props => props.theme.typography.T6.fontFamily};
+  font-size: ${props => props.theme.typography.T6.fontSize};
+  font-weight: ${props => props.active ? '600' : '400'};
+  background-color: ${props => {
+    if (props.active) return props.theme.colors.primary;
+    return props.theme.colors.white;
+  }};
+  color: ${props => {
+    if (props.active) return props.theme.colors.white;
+    return props.theme.colors.gray[600];
+  }};
+  border: 1px solid ${props => {
+    if (props.active) return props.theme.colors.primary;
+    return props.theme.colors.gray[200];
+  }};
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+
+  &:hover:not(:disabled) {
+    background-color: ${props => {
+      if (props.active) return props.theme.colors.primary;
+      return props.theme.colors.purple[100];
+    }};
+    border-color: ${props => {
+      if (props.active) return props.theme.colors.primary;
+      return props.theme.colors.primary;
+    }};
+    color: ${props => {
+      if (props.active) return props.theme.colors.white;
+      return props.theme.colors.primary;
+    }};
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(163, 50, 255, 0.2);
+  }
+
+  &:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+  }
+
+  &:active:not(:disabled) {
+    transform: translateY(0);
+  }
 `;
 
 export default CoursesPage;
