@@ -5,6 +5,7 @@ import { ThemeProvider } from 'styled-components';
 import { theme } from './styles/theme';
 import { SemesterProvider } from './contexts/SemesterContext';
 import { TimetableProvider } from './contexts/TimetableContext';
+import { ChatProvider } from './contexts/ChatContext';
 import GlobalStyle from './styles/GlobalStyle';
 import MainPage from './pages/MainPage';
 import CoursesPage from './pages/CoursesPage';
@@ -17,16 +18,18 @@ const App: React.FC = () => {
       <GlobalStyle />
       <SemesterProvider>
         <TimetableProvider>
-          <Router>
-            <Routes>
-              <Route path="/" element={<Navigate to="/timetable" replace />} />
-              <Route path="/timetable" element={<MainPage />} />
-              <Route path="/courses" element={<CoursesPage />} />
-              <Route path="/suggest" element={<AiSuggestPage />} />
-              <Route path="/aiMaker" element={<AiMakerPage />} />
-              <Route path="*" element={<Navigate to="/timetable" replace />} />
-            </Routes>
-          </Router>
+          <ChatProvider>
+            <Router>
+              <Routes>
+                <Route path="/" element={<Navigate to="/timetable" replace />} />
+                <Route path="/timetable" element={<MainPage />} />
+                <Route path="/courses" element={<CoursesPage />} />
+                <Route path="/suggest" element={<AiSuggestPage />} />
+                <Route path="/aiMaker" element={<AiMakerPage />} />
+                <Route path="*" element={<Navigate to="/timetable" replace />} />
+              </Routes>
+            </Router>
+          </ChatProvider>
         </TimetableProvider>
       </SemesterProvider>
     </ThemeProvider>

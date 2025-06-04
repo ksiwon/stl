@@ -1,6 +1,6 @@
 // src/pages/MainPage.tsx
 import React, { useState, useEffect, useRef } from 'react';
-import { FiX, FiPlus, FiInfo, FiClock, FiUser, FiMapPin, FiStar, FiActivity, FiBookOpen, FiDownload, FiShare } from 'react-icons/fi';
+import { FiX, FiPlus, FiInfo, FiClock, FiUser, FiMapPin, FiStar, FiActivity, FiBookOpen, FiDownload, FiShare, FiFilter, FiChevronDown, FiCheckCircle } from 'react-icons/fi';
 import { toPng, toBlob } from 'html-to-image';
 import Layout from '../components/Layout';
 import { MenuItemType } from '../components/Sidebar';
@@ -16,7 +16,9 @@ import {
   getCourseDescription,
   calculateSubjectRating,
   getSubjectReviews,
-  getRatingColor
+  getRatingColor,
+  getFilterOptions,
+  searchSubjects
 } from '../utils/subjectUtils';
 import { styled } from 'styled-components';
 
@@ -28,6 +30,15 @@ const MainPage: React.FC = () => {
   const { selectedSubjects, addSubject, removeSubject } = useTimetable();
   const [searchQuery, setSearchQuery] = useState('');
   const [hoveredSubject, setHoveredSubject] = useState<Subject | null>(null);
+
+  // 필터 상태 추가
+  const [department, setDepartment] = useState('All');
+  const [departmentFilterOpen, setDepartmentFilterOpen] = useState(false);
+  const [departments, setDepartments] = useState<string[]>([]);
+  
+  // 페이지네이션 상태 추가
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 20;
 
   // 시간표 라벨
   const days = ['월', '화', '수', '목', '금'];
@@ -219,6 +230,11 @@ const MainPage: React.FC = () => {
     if (allSubjects.length > 0) {
       const semesterSubjects = filterSubjectsBySemester(allSubjects, currentSemester);
       setFilteredSubjectsBySemester(semesterSubjects);
+      
+      // 필터 옵션 설정 (현재 학기에 맞게)
+      const { departments } = getFilterOptions(semesterSubjects);
+      setDepartments(departments);
+      
       console.log(`${currentSemester} 과목 데이터 로드됨: ${semesterSubjects.length}개`);
     }
   }, [currentSemester, allSubjects]);
@@ -272,12 +288,47 @@ const MainPage: React.FC = () => {
     }
   };
 
-  // 검색 결과 필터링 - 현재 학기 과목 중에서만 검색
-  const searchResults = filteredSubjectsBySemester.filter(subject =>
-    subject.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    subject.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    subject.professor.toLowerCase().includes(searchQuery.toLowerCase())
-  ).slice(0, 20); // 최대 20개만 표시
+  // 검색어 변경 시 페이지 리셋
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchQuery(e.target.value);
+    setCurrentPage(1);
+  };
+
+  // 개설학과 필터 토글
+  const toggleDepartmentFilter = () => {
+    setDepartmentFilterOpen(!departmentFilterOpen);
+  };
+
+  // 검색 결과 필터링 - 현재 학기 과목 중에서만 검색 및 필터링
+  const allFilteredResults = searchSubjects(filteredSubjectsBySemester, searchQuery, {
+    department,
+    category: 'All',
+    isEnglish: undefined
+  });
+
+  // 페이지네이션 계산
+  const totalPages = Math.ceil(allFilteredResults.length / ITEMS_PER_PAGE);
+  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+  const endIndex = startIndex + ITEMS_PER_PAGE;
+  const currentPageResults = allFilteredResults.slice(startIndex, endIndex);
+
+  // 페이지 변경 핸들러
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+  };
+
+  // 페이지 번호 배열 생성 (최대 5개 페이지 표시)
+  const getVisiblePages = () => {
+    const maxVisible = 5;
+    let start = Math.max(1, currentPage - Math.floor(maxVisible / 2));
+    let end = Math.min(totalPages, start + maxVisible - 1);
+    
+    if (end - start + 1 < maxVisible) {
+      start = Math.max(1, end - maxVisible + 1);
+    }
+    
+    return Array.from({ length: end - start + 1 }, (_, i) => start + i);
+  };
 
   // 총 학점 계산
   const totalCredits = calculateTotalCredits(selectedSubjects);
@@ -441,16 +492,58 @@ const MainPage: React.FC = () => {
           <CourseSection>
             <CourseSectionHeader>
               <h3>개설 과목</h3>
-              <SearchInput 
-                placeholder="과목명, 교수명, 과목코드 검색..." 
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
+              <SearchFilterContainer>
+                <SearchInput 
+                  placeholder="과목명, 교수명, 과목코드 검색..." 
+                  value={searchQuery}
+                  onChange={handleSearchChange}
+                />
+                
+                {/* 개설학과 필터 */}
+                <FilterContainer>
+                  <FilterButton 
+                    onClick={toggleDepartmentFilter}
+                    active={department !== 'All'}
+                  >
+                    <FiFilter size={16} />
+                    <span>개설학과</span>
+                    {department !== 'All' && <FilterCount>1</FilterCount>}
+                    <FiChevronDown 
+                      size={16} 
+                      style={{ transform: departmentFilterOpen ? 'rotate(180deg)' : 'none' }} 
+                    />
+                  </FilterButton>
+                  
+                  {departmentFilterOpen && (
+                    <FilterDropdown>
+                      <FilterSection>
+                        <FilterTitle>개설학과</FilterTitle>
+                        <FilterOptions>
+                          {departments.map(dept => (
+                            <FilterOption 
+                              key={dept} 
+                              selected={department === dept}
+                              onClick={() => {
+                                setDepartment(dept);
+                                setCurrentPage(1); // 필터 변경 시 페이지 리셋
+                                setDepartmentFilterOpen(false);
+                              }}
+                            >
+                              {department === dept && <FiCheckCircle size={16} />}
+                              <span>{dept}</span>
+                            </FilterOption>
+                          ))}
+                        </FilterOptions>
+                      </FilterSection>
+                    </FilterDropdown>
+                  )}
+                </FilterContainer>
+              </SearchFilterContainer>
             </CourseSectionHeader>
             
             <CourseList>
-              {searchResults.length > 0 ? (
-                searchResults.map(subject => (
+              {currentPageResults.length > 0 ? (
+                currentPageResults.map(subject => (
                   <CourseItem key={subject.id}>
                     <CourseInfo>
                       <CourseItemCode>{subject.code}</CourseItemCode>
@@ -535,12 +628,53 @@ const MainPage: React.FC = () => {
                 ))
               ) : (
                 <EmptyState>
-                  {searchQuery 
+                  {searchQuery || department !== 'All'
                     ? '검색 결과가 없습니다.' 
                     : `${currentSemester}에 개설된 과목이 없습니다.`}
                 </EmptyState>
               )}
             </CourseList>
+
+            {/* 페이지네이션 */}
+            {totalPages > 1 && (
+              <PaginationContainer>
+                <PaginationButton
+                  onClick={() => handlePageChange(1)}
+                  disabled={currentPage === 1}
+                >
+                  처음
+                </PaginationButton>
+                <PaginationButton
+                  onClick={() => handlePageChange(currentPage - 1)}
+                  disabled={currentPage === 1}
+                >
+                  이전
+                </PaginationButton>
+                
+                {getVisiblePages().map(page => (
+                  <PaginationButton
+                    key={page}
+                    onClick={() => handlePageChange(page)}
+                    active={currentPage === page}
+                  >
+                    {page}
+                  </PaginationButton>
+                ))}
+                
+                <PaginationButton
+                  onClick={() => handlePageChange(currentPage + 1)}
+                  disabled={currentPage === totalPages}
+                >
+                  다음
+                </PaginationButton>
+                <PaginationButton
+                  onClick={() => handlePageChange(totalPages)}
+                  disabled={currentPage === totalPages}
+                >
+                  마지막
+                </PaginationButton>
+              </PaginationContainer>
+            )}
           </CourseSection>
 
           {/* 내 수업 목록 */}
@@ -1184,22 +1318,29 @@ const CourseSection = styled.div`
 
 const CourseSectionHeader = styled.div`
   display: flex;
-  justify-content: space-between;
-  align-items: center;
+  flex-direction: column;
+  gap: 16px;
   margin-bottom: 16px;
 
   h3 {
-    flex-shrink: 0;
     font-family: ${props => props.theme.typography.T4.fontFamily};
     font-size: ${props => props.theme.typography.T4.fontSize};
     font-weight: ${props => props.theme.typography.T4.fontWeight};
     color: ${props => props.theme.colors.black};
-    margin-right: 8px;
+    margin: 0;
   }
 `;
 
+const SearchFilterContainer = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+`;
+
 const SearchInput = styled.input`
-  width: 300px;
+  flex: 1;
+  min-width: 200px;
   padding: 10px 12px;
   font-family: ${props => props.theme.typography.T6.fontFamily};
   font-size: ${props => props.theme.typography.T6.fontSize};
@@ -1210,6 +1351,153 @@ const SearchInput = styled.input`
   &:focus {
     border-color: ${props => props.theme.colors.primary};
     box-shadow: 0 0 0 2px ${props => props.theme.colors.purple[100]};
+  }
+`;
+
+const FilterContainer = styled.div`
+  position: relative;
+`;
+
+const FilterButton = styled.button<{ active?: boolean }>`
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background-color: ${props => props.active ? props.theme.colors.purple[100] : props.theme.colors.white};
+  border: 1px solid ${props => props.active ? props.theme.colors.primary : props.theme.colors.gray[200]};
+  border-radius: 4px;
+  font-family: ${props => props.theme.typography.T6.fontFamily};
+  font-size: ${props => props.theme.typography.T6.fontSize};
+  color: ${props => props.active ? props.theme.colors.primary : props.theme.colors.gray[600]};
+  cursor: pointer;
+  transition: all 0.2s;
+
+  &:hover {
+    background-color: ${props => props.active ? props.theme.colors.purple[100] : props.theme.colors.gray[100]};
+    border-color: ${props => props.active ? props.theme.colors.primary : props.theme.colors.gray[300]};
+  }
+`;
+
+const FilterCount = styled.span`
+  background-color: ${props => props.theme.colors.primary};
+  color: ${props => props.theme.colors.white};
+  font-size: ${props => props.theme.typography.T7.fontSize};
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 10px;
+  min-width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+`;
+
+const FilterDropdown = styled.div`
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 10;
+  width: 280px;
+  background-color: ${props => props.theme.colors.white};
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  margin-top: 8px;
+  padding: 16px;
+  border: 1px solid ${props => props.theme.colors.gray[200]};
+`;
+
+const FilterSection = styled.div`
+  margin-bottom: 0;
+`;
+
+const FilterTitle = styled.div`
+  font-family: ${props => props.theme.typography.T6.fontFamily};
+  font-size: ${props => props.theme.typography.T6.fontSize};
+  font-weight: 600;
+  color: ${props => props.theme.colors.black};
+  margin-bottom: 12px;
+`;
+
+const FilterOptions = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 200px;
+  overflow-y: auto;
+`;
+
+const FilterOption = styled.div<{ selected: boolean }>`
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-family: ${props => props.theme.typography.T6.fontFamily};
+  font-size: ${props => props.theme.typography.T6.fontSize};
+  color: ${props => props.selected ? props.theme.colors.primary : props.theme.colors.gray[600]};
+  background-color: ${props => props.selected ? props.theme.colors.purple[100] : 'transparent'};
+  border-radius: 4px;
+  transition: all 0.2s;
+
+  &:hover {
+    background-color: ${props => props.selected ? props.theme.colors.purple[100] : props.theme.colors.gray[100]};
+  }
+
+  svg {
+    color: ${props => props.theme.colors.primary};
+  }
+`;
+
+// 페이지네이션 스타일
+const PaginationContainer = styled.div`
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 0 0 0;
+`;
+
+const PaginationButton = styled.button<{ active?: boolean }>`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 24px;
+  padding: 2px 6px;
+  font-family: ${props => props.theme.typography.T7.fontFamily};
+  font-size: ${props => props.theme.typography.T7.fontSize};
+  font-weight: ${props => props.active ? '600' : '400'};
+  flex-shrink: 0;
+  background-color: ${props => {
+    if (props.active) return props.theme.colors.primary;
+    return props.theme.colors.white;
+  }};
+  color: ${props => {
+    if (props.active) return props.theme.colors.white;
+    return props.theme.colors.gray[600];
+  }};
+  border: 1px solid ${props => {
+    if (props.active) return props.theme.colors.primary;
+    return props.theme.colors.gray[200];
+  }};
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+
+  &:hover:not(:disabled) {
+    background-color: ${props => {
+      if (props.active) return props.theme.colors.primary;
+      return props.theme.colors.gray[100];
+    }};
+    border-color: ${props => {
+      if (props.active) return props.theme.colors.primary;
+      return props.theme.colors.gray[300];
+    }};
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
 `;
 

@@ -27,7 +27,12 @@ const CoursesPage: React.FC = () => {
   const [department, setDepartment] = useState('All');
   const [category, setCategory] = useState('All');
   const [isEnglish, setIsEnglish] = useState<boolean | undefined>(undefined);
-  const [filterOpen, setFilterOpen] = useState(false);
+  
+  // 각 필터의 드롭다운 상태 분리
+  const [departmentFilterOpen, setDepartmentFilterOpen] = useState(false);
+  const [categoryFilterOpen, setCategoryFilterOpen] = useState(false);
+  const [languageFilterOpen, setLanguageFilterOpen] = useState(false);
+  
   const [departments, setDepartments] = useState<string[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
 
@@ -76,6 +81,35 @@ const CoursesPage: React.FC = () => {
     setCategory('All');
     setIsEnglish(undefined);
     setSearchQuery('');
+    // 모든 드롭다운 닫기
+    setDepartmentFilterOpen(false);
+    setCategoryFilterOpen(false);
+    setLanguageFilterOpen(false);
+  };
+
+  // 모든 드롭다운 닫기 (다른 드롭다운 클릭 시)
+  const closeAllDropdowns = () => {
+    setDepartmentFilterOpen(false);
+    setCategoryFilterOpen(false);
+    setLanguageFilterOpen(false);
+  };
+
+  // 개설학과 필터 토글
+  const toggleDepartmentFilter = () => {
+    closeAllDropdowns();
+    setDepartmentFilterOpen(!departmentFilterOpen);
+  };
+
+  // 과목구분 필터 토글
+  const toggleCategoryFilter = () => {
+    closeAllDropdowns();
+    setCategoryFilterOpen(!categoryFilterOpen);
+  };
+
+  // 영어강의 필터 토글
+  const toggleLanguageFilter = () => {
+    closeAllDropdowns();
+    setLanguageFilterOpen(!languageFilterOpen);
   };
 
   // 검색 결과 필터링 - 현재 학기 과목 중에서만 검색 및 필터링
@@ -124,13 +158,21 @@ const CoursesPage: React.FC = () => {
           </SearchContainer>
           
           <FilterContainer>
-            <FilterButton onClick={() => setFilterOpen(!filterOpen)}>
+            {/* 개설학과 필터 */}
+            <FilterButton 
+              onClick={toggleDepartmentFilter}
+              active={department !== 'All'}
+            >
               <FiFilter size={16} />
-              <span>필터</span>
-              <FiChevronDown size={16} style={{ transform: filterOpen ? 'rotate(180deg)' : 'none' }} />
+              <span>개설학과</span>
+              {department !== 'All' && <FilterCount>1</FilterCount>}
+              <FiChevronDown 
+                size={16} 
+                style={{ transform: departmentFilterOpen ? 'rotate(180deg)' : 'none' }} 
+              />
             </FilterButton>
             
-            {filterOpen && (
+            {departmentFilterOpen && (
               <FilterDropdown>
                 <FilterSection>
                   <FilterTitle>개설학과</FilterTitle>
@@ -139,7 +181,10 @@ const CoursesPage: React.FC = () => {
                       <FilterOption 
                         key={dept} 
                         selected={department === dept}
-                        onClick={() => setDepartment(dept)}
+                        onClick={() => {
+                          setDepartment(dept);
+                          setDepartmentFilterOpen(false);
+                        }}
                       >
                         {department === dept && <FiCheckCircle size={16} />}
                         <span>{dept}</span>
@@ -147,9 +192,27 @@ const CoursesPage: React.FC = () => {
                     ))}
                   </FilterOptions>
                 </FilterSection>
-                
-                <FilterDivider />
-                
+              </FilterDropdown>
+            )}
+          </FilterContainer>
+
+          <FilterContainer>
+            {/* 과목구분 필터 */}
+            <FilterButton 
+              onClick={toggleCategoryFilter}
+              active={category !== 'All'}
+            >
+              <FiBook size={16} />
+              <span>과목구분</span>
+              {category !== 'All' && <FilterCount>1</FilterCount>}
+              <FiChevronDown 
+                size={16} 
+                style={{ transform: categoryFilterOpen ? 'rotate(180deg)' : 'none' }} 
+              />
+            </FilterButton>
+            
+            {categoryFilterOpen && (
+              <FilterDropdown>
                 <FilterSection>
                   <FilterTitle>과목구분</FilterTitle>
                   <FilterOptions>
@@ -157,7 +220,10 @@ const CoursesPage: React.FC = () => {
                       <FilterOption 
                         key={cat} 
                         selected={category === cat}
-                        onClick={() => setCategory(cat)}
+                        onClick={() => {
+                          setCategory(cat);
+                          setCategoryFilterOpen(false);
+                        }}
                       >
                         {category === cat && <FiCheckCircle size={16} />}
                         <span>{cat}</span>
@@ -165,42 +231,73 @@ const CoursesPage: React.FC = () => {
                     ))}
                   </FilterOptions>
                 </FilterSection>
-                
-                <FilterDivider />
-                
+              </FilterDropdown>
+            )}
+          </FilterContainer>
+
+          <FilterContainer>
+            {/* 영어강의 필터 */}
+            <FilterButton 
+              onClick={toggleLanguageFilter}
+              active={isEnglish !== undefined}
+            >
+              <span style={{ fontSize: '16px' }}>🌐</span>
+              <span>영어강의</span>
+              {isEnglish !== undefined && <FilterCount>1</FilterCount>}
+              <FiChevronDown 
+                size={16} 
+                style={{ transform: languageFilterOpen ? 'rotate(180deg)' : 'none' }} 
+              />
+            </FilterButton>
+            
+            {languageFilterOpen && (
+              <FilterDropdown>
                 <FilterSection>
                   <FilterTitle>영어 강의</FilterTitle>
                   <FilterOptions>
                     <FilterOption 
                       selected={isEnglish === undefined}
-                      onClick={() => setIsEnglish(undefined)}
+                      onClick={() => {
+                        setIsEnglish(undefined);
+                        setLanguageFilterOpen(false);
+                      }}
                     >
                       {isEnglish === undefined && <FiCheckCircle size={16} />}
                       <span>전체</span>
                     </FilterOption>
                     <FilterOption 
                       selected={isEnglish === true}
-                      onClick={() => setIsEnglish(true)}
+                      onClick={() => {
+                        setIsEnglish(true);
+                        setLanguageFilterOpen(false);
+                      }}
                     >
                       {isEnglish === true && <FiCheckCircle size={16} />}
                       <span>영어 강의만</span>
                     </FilterOption>
                     <FilterOption 
                       selected={isEnglish === false}
-                      onClick={() => setIsEnglish(false)}
+                      onClick={() => {
+                        setIsEnglish(false);
+                        setLanguageFilterOpen(false);
+                      }}
                     >
                       {isEnglish === false && <FiCheckCircle size={16} />}
                       <span>한국어 강의만</span>
                     </FilterOption>
                   </FilterOptions>
                 </FilterSection>
-                
-                <FilterActions>
-                  <ResetButton onClick={resetFilters}>초기화</ResetButton>
-                </FilterActions>
               </FilterDropdown>
             )}
           </FilterContainer>
+
+          {/* 필터 초기화 버튼 */}
+          {(department !== 'All' || category !== 'All' || isEnglish !== undefined || searchQuery) && (
+            <ResetButton onClick={resetFilters}>
+              <FiX size={16} />
+              초기화
+            </ResetButton>
+          )}
         </SearchFilterSection>
         
         <ResultsInfo>
@@ -536,11 +633,13 @@ const SearchFilterSection = styled.div`
   align-items: center;
   gap: 12px;
   margin-bottom: 20px;
+  flex-wrap: wrap;
 `;
 
 const SearchContainer = styled.div`
   position: relative;
   flex: 1;
+  min-width: 250px;
 `;
 
 const SearchIcon = styled.div`
@@ -570,39 +669,56 @@ const FilterContainer = styled.div`
   position: relative;
 `;
 
-const FilterButton = styled.button`
+const FilterButton = styled.button<{ active?: boolean }>`
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 10px 12px;
-  background-color: ${props => props.theme.colors.white};
-  border: 1px solid ${props => props.theme.colors.gray[200]};
+  background-color: ${props => props.active ? props.theme.colors.purple[100] : props.theme.colors.white};
+  border: 1px solid ${props => props.active ? props.theme.colors.primary : props.theme.colors.gray[200]};
   border-radius: 4px;
   font-family: ${props => props.theme.typography.T6.fontFamily};
   font-size: ${props => props.theme.typography.T6.fontSize};
-  color: ${props => props.theme.colors.gray[600]};
+  color: ${props => props.active ? props.theme.colors.primary : props.theme.colors.gray[600]};
   cursor: pointer;
+  transition: all 0.2s;
 
   &:hover {
-    background-color: ${props => props.theme.colors.gray[100]};
+    background-color: ${props => props.active ? props.theme.colors.purple[100] : props.theme.colors.gray[100]};
+    border-color: ${props => props.active ? props.theme.colors.primary : props.theme.colors.gray[300]};
   }
+`;
+
+const FilterCount = styled.span`
+  background-color: ${props => props.theme.colors.primary};
+  color: ${props => props.theme.colors.white};
+  font-size: ${props => props.theme.typography.T7.fontSize};
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 10px;
+  min-width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 `;
 
 const FilterDropdown = styled.div`
   position: absolute;
   top: 100%;
-  right: 0;
+  left: 0;
   z-index: 10;
-  width: 320px;
+  width: 280px;
   background-color: ${props => props.theme.colors.white};
   border-radius: 8px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
   margin-top: 8px;
   padding: 16px;
+  border: 1px solid ${props => props.theme.colors.gray[200]};
 `;
 
 const FilterSection = styled.div`
-  margin-bottom: 16px;
+  margin-bottom: 0;
 `;
 
 const FilterTitle = styled.div`
@@ -610,56 +726,56 @@ const FilterTitle = styled.div`
   font-size: ${props => props.theme.typography.T6.fontSize};
   font-weight: 600;
   color: ${props => props.theme.colors.black};
-  margin-bottom: 8px;
+  margin-bottom: 12px;
 `;
 
 const FilterOptions = styled.div`
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: 8px;
+  max-height: 200px;
+  overflow-y: auto;
 `;
 
 const FilterOption = styled.div<{ selected: boolean }>`
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 10px;
+  gap: 8px;
+  padding: 8px 12px;
   cursor: pointer;
   font-family: ${props => props.theme.typography.T6.fontFamily};
   font-size: ${props => props.theme.typography.T6.fontSize};
   color: ${props => props.selected ? props.theme.colors.primary : props.theme.colors.gray[600]};
-  background-color: ${props => props.selected ? props.theme.colors.purple[100] : props.theme.colors.gray[100]};
+  background-color: ${props => props.selected ? props.theme.colors.purple[100] : 'transparent'};
   border-radius: 4px;
+  transition: all 0.2s;
 
   &:hover {
-    background-color: ${props => props.selected ? props.theme.colors.purple[100] : props.theme.colors.gray[200]};
+    background-color: ${props => props.selected ? props.theme.colors.purple[100] : props.theme.colors.gray[100]};
+  }
+
+  svg {
+    color: ${props => props.theme.colors.primary};
   }
 `;
 
-const FilterDivider = styled.div`
-  height: 1px;
-  background-color: ${props => props.theme.colors.gray[200]};
-  margin: 12px 0;
-`;
-
-const FilterActions = styled.div`
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 16px;
-`;
-
 const ResetButton = styled.button`
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 12px;
   font-family: ${props => props.theme.typography.T6.fontFamily};
   font-size: ${props => props.theme.typography.T6.fontSize};
   background-color: ${props => props.theme.colors.white};
-  color: ${props => props.theme.colors.primary};
-  border: 1px solid ${props => props.theme.colors.primary};
+  color: ${props => props.theme.colors.gray[600]};
+  border: 1px solid ${props => props.theme.colors.gray[300]};
   border-radius: 4px;
-  padding: 6px 12px;
   cursor: pointer;
+  transition: all 0.2s;
 
   &:hover {
-    background-color: ${props => props.theme.colors.purple[100]};
+    background-color: ${props => props.theme.colors.gray[100]};
+    color: ${props => props.theme.colors.gray[600]};
   }
 `;
 

@@ -1,12 +1,13 @@
-// src/pages/AiMakerPage.tsx - 백엔드 서버 없이 OpenAI 직접 호출
+// src/pages/AiMakerPage.tsx - Context를 사용하여 대화 내역 유지
 import React, { useState, useEffect, useRef } from 'react';
 import styled from 'styled-components';
-import { FiSend, FiRefreshCw, FiDownload, FiCpu, FiUser, FiBook, FiClock, FiMapPin, FiInfo, FiStar, FiActivity, FiBookOpen, FiPlus, FiX, FiCheckCircle } from 'react-icons/fi';
+import { FiSend, FiRefreshCw, FiCpu, FiUser, FiBook, FiClock, FiMapPin, FiInfo, FiStar, FiActivity, FiBookOpen, FiPlus, FiX, FiCheckCircle } from 'react-icons/fi';
 import Layout from '../components/Layout';
 import { MenuItemType } from '../components/Sidebar';
 import { Subject } from '../types/subject';
 import { useSemester } from '../contexts/SemesterContext';
 import { useTimetable } from '../contexts/TimetableContext';
+import { useChat } from '../contexts/ChatContext';  // 새로 추가
 import { 
   processSubjectData, 
   filterSubjectsBySemester,
@@ -17,45 +18,32 @@ import {
   getSubjectReviews
 } from '../utils/subjectUtils';
 
-// 메시지 타입 정의
-interface Message {
-  role: 'user' | 'assistant' | 'system';
-  content: string;
-}
-
-// 추천 결과 타입 정의
-interface RecommendationResult {
-  subjects: Subject[];
-  explanation: string;
-}
-
 // OpenAI API 설정
 const OPENAI_API_KEY = process.env.REACT_APP_OPENAI_API_KEY;
 const VECTOR_STORE_ID = process.env.REACT_APP_VECTOR_STORE_ID;
 
 const AiMakerPage: React.FC = () => {
   const [activeMenuItem, setActiveMenuItem] = useState<MenuItemType>('aiMaker');
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      role: 'system',
-      content: '안녕하세요! 저는 당신의 시간표 작성을 도와드릴 AI 어시스턴트입니다. 전공, 학년, 듣고 싶은 수업, 오전 수업 선호 여부, 영어 강의 여부, 필수 과목, 원하는 총 학점 등을 알려주시면 최적의 시간표를 추천해 드릴게요.'
-    },
-    {
-      role: 'assistant',
-      content: '안녕하세요! 저는 당신의 시간표 작성을 도와드릴 AI 어시스턴트입니다. 어떤 도움이 필요하신가요? 전공, 학년, 듣고 싶은 수업, 오전 수업 선호 여부, 영어 강의 여부, 필수 과목, 원하는 총 학점 등을 알려주시면 최적의 시간표를 추천해 드릴게요.'
-    }
-  ]);
-  
-  const [isLoading, setIsLoading] = useState<boolean>(false);
   const [inputMessage, setInputMessage] = useState<string>('');
   const [allSubjects, setAllSubjects] = useState<Subject[]>([]);
   const [filteredSubjectsBySemester, setFilteredSubjectsBySemester] = useState<Subject[]>([]);
-  const [recommendationResult, setRecommendationResult] = useState<RecommendationResult | null>(null);
   const [selectedSubject, setSelectedSubject] = useState<Subject | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   
   const { currentSemester } = useSemester();
   const { addSubject } = useTimetable();
+  
+  // ChatContext 사용
+  const { 
+    messages, 
+    isLoading, 
+    recommendationResult, 
+    addMessage, 
+    setIsLoading, 
+    setRecommendationResult, 
+    resetChat 
+  } = useChat();
+  
   const chatContainerRef = useRef<HTMLDivElement>(null);
   
   // 모든 과목 데이터 로드
@@ -88,14 +76,97 @@ const AiMakerPage: React.FC = () => {
   const isPerfectMatch = (subject: Subject): boolean => {
     if (!recommendationResult) return false;
     
-    const recommendedSubject = recommendationResult.subjects.find(rec => 
-      rec.code === subject.code && 
-      rec.professor === subject.professor &&
-      // 일정 비교 (시간표 문자열이 정확히 같은지)
-      JSON.stringify(rec.schedules) === JSON.stringify(subject.schedules)
+    console.log('Perfect Match 검사 중:', {
+      subjectCode: subject.code,
+      subjectProfessor: subject.professor,
+      subjectSchedules: subject.schedules
+    });
+    
+    // AI가 추천한 과목 코드들을 추출
+    const recommendedCodes = parseRecommendedCourses(recommendationResult.explanation);
+    console.log('AI가 추천한 과목 코드들:', recommendedCodes);
+    
+    // 1. 먼저 과목 코드가 AI 추천 목록에 있는지 확인
+    if (!recommendedCodes.includes(subject.code)) {
+      console.log(`${subject.code}: AI 추천 목록에 없음`);
+      return false;
+    }
+    
+    // 2. AI 응답에서 해당 과목의 교수명과 시간을 추출해서 비교
+    const aiResponse = recommendationResult.explanation;
+    
+    // AI 응답에서 해당 과목 코드가 포함된 줄을 찾기
+    const lines = aiResponse.split('\n');
+    const subjectLine = lines.find(line => 
+      line.includes(`[${subject.code}]`) && line.includes('교수:')
     );
     
-    return !!recommendedSubject;
+    if (!subjectLine) {
+      console.log(`${subject.code}: AI 응답에서 해당 과목 줄을 찾을 수 없음`);
+      return false;
+    }
+    
+    console.log('AI 응답 해당 줄:', subjectLine);
+    
+    // 3. 교수명 일치 확인 (교수: 뒤의 이름과 비교)
+    const professorMatch = subjectLine.match(/교수:\s*([^)]+)\)/);
+    if (!professorMatch || !professorMatch[1].includes(subject.professor)) {
+      console.log(`${subject.code}: 교수명 불일치 (실제: ${subject.professor}, AI 응답: ${professorMatch ? professorMatch[1] : '없음'})`);
+      return false;
+    }
+    
+    // 4. 시간 일치 확인 - 더 정확한 패턴 매칭
+    const subjectTimeString = formatScheduleString(subject.schedules);
+    console.log('실제 과목 시간:', subjectTimeString);
+    
+    // AI 응답에서 시간 부분 추출 (다양한 패턴 확인)
+    const timePatterns = [
+      // "화, 수 14:30-16:00" 형식
+      /([월화수목금,\s]+)\s*(\d{1,2}):(\d{2})-(\d{1,2}):(\d{2})/g,
+      // "화 14:30-16:00, 수 14:30-16:00" 형식 
+      /([월화수목금])\s*(\d{1,2}):(\d{2})-(\d{1,2}):(\d{2})/g
+    ];
+    
+    let foundMatch = false;
+    
+    for (const pattern of timePatterns) {
+      const matches = Array.from(subjectLine.matchAll(pattern));
+      console.log('시간 매치 결과:', matches);
+      
+      if (matches.length > 0) {
+        for (const match of matches) {
+          const [fullMatch, dayPart, startH, startM, endH, endM] = match;
+          console.log('매치된 시간:', fullMatch);
+          
+          // 요일 부분 처리
+          const days = dayPart.replace(/[,\s]/g, '').split('').filter(d => ['월','화','수','목','금'].includes(d));
+          const timeStr = `${startH}:${startM}-${endH}:${endM}`;
+          
+          // 실제 과목의 스케줄과 비교
+          const matchingSchedules = subject.schedules.filter(schedule => {
+            const dayName = ['월', '화', '수', '목', '금'][schedule.day];
+            const scheduleTime = `${Math.floor(schedule.startTime/60)}:${(schedule.startTime%60).toString().padStart(2,'0')}-${Math.floor(schedule.endTime/60)}:${(schedule.endTime%60).toString().padStart(2,'0')}`;
+            
+            return days.includes(dayName) && scheduleTime === timeStr;
+          });
+          
+          if (matchingSchedules.length > 0) {
+            foundMatch = true;
+            console.log(`${subject.code}: 시간 매치 성공!`);
+            break;
+          }
+        }
+        if (foundMatch) break;
+      }
+    }
+    
+    if (!foundMatch) {
+      console.log(`${subject.code}: 시간 불일치 (실제: ${subjectTimeString}, AI 응답에서 매치 실패)`);
+      return false;
+    }
+    
+    console.log(`${subject.code}: Perfect Match! ✅`);
+    return true;
   };
 
   const openSubjectModal = (subject: Subject) => {
@@ -114,7 +185,7 @@ const AiMakerPage: React.FC = () => {
   };
 
   // OpenAI API 직접 호출 함수
-  const callOpenAI = async (messages: Message[], subjects: Subject[], semester: string) => {
+  const callOpenAI = async (messages: any[], subjects: Subject[], semester: string) => {
     if (!OPENAI_API_KEY) {
       throw new Error('OpenAI API 키가 설정되지 않았습니다. .env 파일에 REACT_APP_OPENAI_API_KEY를 설정해주세요.');
     }
@@ -162,7 +233,7 @@ const AiMakerPage: React.FC = () => {
 7. 최종적으로 시간표를 다 작성했다면, **수업 시간이 겹치지 않는지 확인**하고, 겹치는 시간이 있다면 겹치지 않을 때까지 다시 시간표를 구성하세요.
 8. 만약 한 과목에 대해 여러 교수님이 계시다면, ${VECTOR_STORE_ID}에 저장된 각 교수님 별 리뷰 내용과 grade, workload, teaching을 고려하여 추천하세요.
 
-최종 답변을 제시할 때는 반드시 다음 형식으로 작성하세요:
+최종 답변을 제시할 때는 반드시 **모든 수업의 시간이 서로 겹치지 않는지 확인 후** 다음 형식으로 작성하세요:
 
 추천 시간표:
 1. [CS.10001] 프로그래밍 기초 (3학점) - 월, 수 10:00-11:15 (교수: 홍길동)
@@ -170,7 +241,7 @@ const AiMakerPage: React.FC = () => {
 3. [HSS.30101] 대학영어 (2학점) - 금 9:00-10:50 (교수: 강감찬)
 
 이렇게 과목 코드를 정확히 대괄호로 표시하고, 각 과목의 학점과 시간을 명확히 명시해주세요.
-그리고 가장 마지막으로 확정된 **최종적인 추천 시간표 하나**만 제시하세요.
+그리고 가장 마지막으로로 확정된 **최종적인 추천 시간표 하나**만 제시하세요.
 
 현재 학기(${semester})에 개설된 과목 목록과 정확한 정보입니다. 반드시 이 정보대로 추천해주세요:
 
@@ -213,12 +284,12 @@ ${availableCourses.map(course =>
     if (inputMessage.trim() === '') return;
     
     // 사용자 메시지 추가
-    const userMessage: Message = {
-      role: 'user',
+    const userMessage = {
+      role: 'user' as const,
       content: inputMessage
     };
     
-    setMessages(prev => [...prev, userMessage]);
+    addMessage(userMessage);
     setInputMessage('');
     setIsLoading(true);
     
@@ -234,10 +305,10 @@ ${availableCourses.map(course =>
       console.log('OpenAI 응답 데이터:', assistantMessage);
       
       // 응답 메시지 추가
-      setMessages(prev => [...prev, {
+      addMessage({
         role: 'assistant',
         content: assistantMessage
-      }]);
+      });
       
       // 추천 결과 처리 - 메시지에서 과목 코드 추출
       if (assistantMessage.includes('추천 시간표') || assistantMessage.includes('추천 과목')) {
@@ -256,10 +327,13 @@ ${availableCourses.map(course =>
           console.log('찾은 추천 과목:', recommendedSubjects.length);
           
           if (recommendedSubjects.length > 0) {
+            // 가장 마지막 "추천 시간표" 부분만 추출
+            const finalTimetableText = extractFinalTimetable(assistantMessage);
+            
             // 추천 결과 설정
             setRecommendationResult({
               subjects: recommendedSubjects,
-              explanation: assistantMessage
+              explanation: finalTimetableText || assistantMessage
             });
           } else {
             console.warn('추천 과목을 찾았으나 실제 과목과 매칭되지 않음');
@@ -272,14 +346,65 @@ ${availableCourses.map(course =>
       }
     } catch (error) {
       console.error('메시지 전송 중 오류 발생:', error);
-      setMessages(prev => [...prev, {
+      addMessage({
         role: 'assistant',
         content: `죄송합니다. 요청을 처리하는 중에 오류가 발생했습니다: ${error instanceof Error ? error.message : '알 수 없는 오류'}`
-      }]);
+      });
     } finally {
       setIsLoading(false);
     }
   };
+
+  // 최종 추천 시간표 부분만 추출하는 함수
+  function extractFinalTimetable(message: string): string {
+    console.log('최종 추천 시간표 부분 추출 시도...');
+    
+    // "추천 시간표"가 포함된 모든 위치를 찾기
+    const timetableMatches = [];
+    let searchIndex = 0;
+    
+    while (true) {
+      const foundIndex = message.indexOf('추천 시간표', searchIndex);
+      if (foundIndex === -1) break;
+      
+      timetableMatches.push(foundIndex);
+      searchIndex = foundIndex + 1;
+    }
+    
+    if (timetableMatches.length === 0) {
+      console.log('추천 시간표 텍스트를 찾을 수 없음');
+      return '';
+    }
+    
+    // 가장 마지막 "추천 시간표" 위치
+    const lastTimetableIndex = timetableMatches[timetableMatches.length - 1];
+    console.log(`마지막 "추천 시간표" 위치: ${lastTimetableIndex}`);
+    
+    // 해당 위치부터 끝까지 또는 다음 섹션까지 추출
+    let endIndex = message.length;
+    
+    // 추천 시간표 이후에 나올 수 있는 구분자들을 찾기
+    const possibleEndings = [
+      '\n\n필요하시면',
+      '\n\n추가로',
+      '\n\n도움이',
+      '\n\n더 궁금한',
+      '\n\n질문이',
+      '\n\n문의사항'
+    ];
+    
+    for (const ending of possibleEndings) {
+      const endingIndex = message.indexOf(ending, lastTimetableIndex);
+      if (endingIndex !== -1 && endingIndex < endIndex) {
+        endIndex = endingIndex;
+      }
+    }
+    
+    const finalTimetableText = message.substring(lastTimetableIndex, endIndex).trim();
+    console.log('추출된 최종 추천 시간표:', finalTimetableText);
+    
+    return finalTimetableText;
+  }
 
   // 클라이언트 측 과목 코드 추출 함수
   function parseRecommendedCourses(message: string): string[] {
@@ -358,35 +483,27 @@ ${availableCourses.map(course =>
     alert(result.message);
   };
   
-  // 대화 초기화 핸들러
+  // 대화 초기화 핸들러 - Context의 resetChat 사용
   const handleResetChat = () => {
-    setMessages([
-      {
-        role: 'system',
-        content: '안녕하세요! 저는 당신의 시간표 작성을 도와드릴 AI 어시스턴트입니다. 전공, 학년, 듣고 싶은 수업, 오전 수업 선호 여부, 영어 강의 여부, 필수 과목, 원하는 총 학점 등을 알려주시면 최적의 시간표를 추천해 드릴게요.'
-      },
-      {
-        role: 'assistant',
-        content: '안녕하세요! 저는 당신의 시간표 작성을 도와드릴 AI 어시스턴트입니다. 어떤 도움이 필요하신가요? 전공, 학년, 듣고 싶은 수업, 오전 수업 선호 여부, 영어 강의 여부, 필수 과목, 원하는 총 학점 등을 알려주시면 최적의 시간표를 추천해 드릴게요.'
-      }
-    ]);
-    setRecommendationResult(null);
+    resetChat();
   };
   
-  // 시간표 다운로드 핸들러 (추후 구현)
-  const handleDownloadTimetable = () => {
-    alert('시간표 다운로드 기능은 개발 중입니다.');
-  };
+  // 시간표 다운로드 핸들러 제거
 
   // 모든 Perfect Match 과목만 추가하는 핸들러
   const handleAddPerfectMatchSubjects = () => {
-    if (!recommendationResult || recommendationResult.subjects.length === 0) return;
+    if (!recommendationResult || recommendationResult.subjects.length === 0) {
+      alert('추천 결과가 없습니다.');
+      return;
+    }
     
     // Perfect Match 과목만 필터링
     const perfectMatchSubjects = recommendationResult.subjects.filter(subject => isPerfectMatch(subject));
     
+    console.log('Perfect Match 과목들:', perfectMatchSubjects);
+    
     if (perfectMatchSubjects.length === 0) {
-      alert('완벽하게 일치하는 추천 과목이 없습니다.');
+      alert('완벽하게 일치하는 AI 추천 과목이 없습니다.');
       return;
     }
     
@@ -394,6 +511,7 @@ ${availableCourses.map(course =>
     let addedCount = 0;
     let failedCount = 0;
     let conflictingSubjects: string[] = [];
+    let duplicateSubjects: string[] = [];
     
     // 모든 Perfect Match 과목을 순회하며 추가 시도
     perfectMatchSubjects.forEach(subject => {
@@ -401,25 +519,39 @@ ${availableCourses.map(course =>
       
       if (result.success) {
         addedCount++;
+        console.log(`추가 성공: ${subject.name}`);
       } else {
         failedCount++;
-        conflictingSubjects.push(subject.name);
+        if (result.message.includes('이미 추가된')) {
+          duplicateSubjects.push(subject.name);
+        } else if (result.message.includes('시간이 겹칩니다')) {
+          conflictingSubjects.push(subject.name);
+        }
+        console.log(`추가 실패: ${subject.name} - ${result.message}`);
       }
     });
     
     // 결과 메시지 생성
     let resultMessage = '';
+    
     if (addedCount > 0) {
-      resultMessage += `${addedCount}개 AI 추천 과목이 시간표에 추가되었습니다.\n`;
+      resultMessage += `✅ ${addedCount}개의 AI 추천 과목이 시간표에 추가되었습니다!\n\n`;
     }
     
-    if (failedCount > 0) {
-      resultMessage += `${failedCount}개 과목은 추가할 수 없습니다.\n`;
-      resultMessage += `(${conflictingSubjects.join(', ')})`;
+    if (duplicateSubjects.length > 0) {
+      resultMessage += `ℹ️ 이미 추가된 과목 (${duplicateSubjects.length}개):\n${duplicateSubjects.join(', ')}\n\n`;
+    }
+    
+    if (conflictingSubjects.length > 0) {
+      resultMessage += `⚠️ 시간 충돌로 추가할 수 없는 과목 (${conflictingSubjects.length}개):\n${conflictingSubjects.join(', ')}\n\n`;
+    }
+    
+    if (addedCount === 0 && failedCount > 0) {
+      resultMessage += '추가할 수 있는 과목이 없습니다.';
     }
     
     // 결과 알림
-    alert(resultMessage);
+    alert(resultMessage.trim());
   };
 
   return (
@@ -464,12 +596,6 @@ ${availableCourses.map(course =>
               <FiRefreshCw size={18} />
               <span>대화 초기화</span>
             </ActionButton>
-            {recommendationResult && (
-              <ActionButton onClick={handleDownloadTimetable} title="시간표 다운로드">
-                <FiDownload size={18} />
-                <span>시간표 다운로드</span>
-              </ActionButton>
-            )}
           </ChatActions>
         </ChatSection>
         {recommendationResult && (
@@ -481,10 +607,12 @@ ${availableCourses.map(course =>
               </SectionTitle>
               
               {/* 완벽히 일치하는 추천 과목만 추가하는 버튼 */}
-              <PerfectMatchButton onClick={handleAddPerfectMatchSubjects}>
-                <FiCheckCircle size={18} />
-                <span>AI 추천 과목만 추가</span>
-              </PerfectMatchButton>
+              {recommendationResult.subjects.some(subject => isPerfectMatch(subject)) && (
+                <PerfectMatchButton onClick={handleAddPerfectMatchSubjects}>
+                  <FiCheckCircle size={18} />
+                  <span>AI 추천 과목만 추가 ({recommendationResult.subjects.filter(subject => isPerfectMatch(subject)).length}개)</span>
+                </PerfectMatchButton>
+              )}
             </SectionHeader>
             
             <RecommendationDescription>
@@ -492,110 +620,223 @@ ${availableCourses.map(course =>
             </RecommendationDescription>
             
             <SubjectList>
-              {recommendationResult.subjects.map(subject => {
-                // 리뷰 평점 데이터 가져오기
-                const rating = calculateSubjectRating(subject);
-                // 추천 일치 수준 확인 (코드, 교수, 시간 모두 일치인지)
-                const isPerfectlyMatched = isPerfectMatch(subject);
-                
-                return (
-                  <CourseCard key={subject.id}>
-                    <CourseHeader>
-                      <CourseCode>{subject.code}</CourseCode>
-                      {isPerfectlyMatched ? (
+              {/* AI 추천 과목들을 먼저 표시 (상단에 위치) - 중복 제거 */}
+              {recommendationResult.subjects
+                .filter(subject => isPerfectMatch(subject))
+                .filter((subject, index, array) => {
+                  // 중복 제거: 같은 과목 코드 + 교수 + 시간의 첫 번째 항목만 유지
+                  return array.findIndex(s => 
+                    s.code === subject.code && 
+                    s.professor === subject.professor && 
+                    JSON.stringify(s.schedules) === JSON.stringify(subject.schedules)
+                  ) === index;
+                })
+                .map(subject => {
+                  const rating = calculateSubjectRating(subject);
+                  
+                  return (
+                    <CourseCard key={`perfect-${subject.code}-${subject.professor}-${subject.schedules.map((s: any) => `${s.day}-${s.startTime}-${s.endTime}`).join('-')}`}>
+                      <CourseHeader>
+                        <CourseCode>{subject.code}</CourseCode>
                         <CourseBadge color="#E2FDEA">
                           <FiCheckCircle size={12} style={{ marginRight: '4px' }} />
                           AI 추천
                         </CourseBadge>
-                      ) : (
-                        <CourseBadge color="#F0F0F0">코스 매치</CourseBadge>
-                      )}
-                    </CourseHeader>
-                    <CourseBody>
-                      <CourseName>{subject.name}</CourseName>
-                      <CourseDetail>
-                        <FiUser size={14} />
-                        <span>{subject.professor}</span>
-                      </CourseDetail>
-                      <CourseDetail>
-                        <FiBook size={14} />
-                        <span>{subject.credits} 학점</span>
-                      </CourseDetail>
-                      <CourseDetail>
-                        <FiClock size={14} />
-                        <span>{formatScheduleString(subject.schedules)}</span>
-                      </CourseDetail>
-                      {subject.classroom && (
+                      </CourseHeader>
+                      <CourseBody>
+                        <CourseName>{subject.name}</CourseName>
                         <CourseDetail>
-                          <FiMapPin size={14} />
-                          <span>{subject.classroom}</span>
+                          <FiUser size={14} />
+                          <span>{subject.professor}</span>
                         </CourseDetail>
-                      )}
-                      
-                      {/* 과목 설명 */}
-                      <CourseDescription>
-                        <FiInfo size={14} />
-                        <span>
-                          {(() => {
-                            const description = getCourseDescription(subject.code);
-                            return description.length > 100
-                              ? `${description.substring(0, 100)}...`
-                              : description;
-                          })()}
-                        </span>
-                      </CourseDescription>
-                      
-                      {/* 과목 평점 표시 (있는 경우에만) */}
-                      {rating && (
-                        <RatingSection>
-                          <RatingTitle>강의 평가 ({rating.reviewCount}명)</RatingTitle>
-                          <RatingGrid>
-                            <RatingItem>
-                              <RatingLabel>
-                                <FiStar size={12} />
-                                <span>학점</span>
-                                <RatingValue color={getRatingColor(rating.grade)}>
-                                  {rating.grade}
-                                </RatingValue>
-                              </RatingLabel>
-                            </RatingItem>
-                            <RatingItem>
-                              <RatingLabel>
-                                <FiActivity size={12} />
-                                <span>로드</span>
-                                <RatingValue color={getRatingColor(rating.workload)}>
-                                  {rating.workload}
-                                </RatingValue>
-                              </RatingLabel>
-                            </RatingItem>
-                            <RatingItem>
-                              <RatingLabel>
-                                <FiBookOpen size={12} />
-                                <span>강의</span>
-                                <RatingValue color={getRatingColor(rating.teaching)}>
-                                  {rating.teaching}
-                                </RatingValue>
-                              </RatingLabel>
-                            </RatingItem>
-                          </RatingGrid>
-                        </RatingSection>
-                      )}
-                    </CourseBody>
-                    <CourseFooter>
-                      <ButtonGroup>
-                        <MoreButton onClick={() => openSubjectModal(subject)}>
-                          <FiInfo size={16} />
-                          리뷰 상세
-                        </MoreButton>
-                        <AddButton onClick={() => handleAddSubject(subject)}>
-                          <FiPlus size={16} />
-                          시간표에 추가
-                        </AddButton>
-                      </ButtonGroup>
-                    </CourseFooter>
-                  </CourseCard>
-                );
-              })}
+                        <CourseDetail>
+                          <FiBook size={14} />
+                          <span>{subject.credits} 학점</span>
+                        </CourseDetail>
+                        <CourseDetail>
+                          <FiClock size={14} />
+                          <span>{formatScheduleString(subject.schedules)}</span>
+                        </CourseDetail>
+                        {subject.classroom && (
+                          <CourseDetail>
+                            <FiMapPin size={14} />
+                            <span>{subject.classroom}</span>
+                          </CourseDetail>
+                        )}
+                        
+                        {/* 과목 설명 */}
+                        <CourseDescription>
+                          <FiInfo size={14} />
+                          <span>
+                            {(() => {
+                              const description = getCourseDescription(subject.code);
+                              return description.length > 100
+                                ? `${description.substring(0, 100)}...`
+                                : description;
+                            })()}
+                          </span>
+                        </CourseDescription>
+                        
+                        {/* 과목 평점 표시 (있는 경우에만) */}
+                        {rating && (
+                          <RatingSection>
+                            <RatingTitle>강의 평가 ({rating.reviewCount}명)</RatingTitle>
+                            <RatingGrid>
+                              <RatingItem>
+                                <RatingLabel>
+                                  <FiStar size={12} />
+                                  <span>학점</span>
+                                  <RatingValue color={getRatingColor(rating.grade)}>
+                                    {rating.grade}
+                                  </RatingValue>
+                                </RatingLabel>
+                              </RatingItem>
+                              <RatingItem>
+                                <RatingLabel>
+                                  <FiActivity size={12} />
+                                  <span>로드</span>
+                                  <RatingValue color={getRatingColor(rating.workload)}>
+                                    {rating.workload}
+                                  </RatingValue>
+                                </RatingLabel>
+                              </RatingItem>
+                              <RatingItem>
+                                <RatingLabel>
+                                  <FiBookOpen size={12} />
+                                  <span>강의</span>
+                                  <RatingValue color={getRatingColor(rating.teaching)}>
+                                    {rating.teaching}
+                                  </RatingValue>
+                                </RatingLabel>
+                              </RatingItem>
+                            </RatingGrid>
+                          </RatingSection>
+                        )}
+                      </CourseBody>
+                      <CourseFooter>
+                        <ButtonGroup>
+                          <MoreButton onClick={() => openSubjectModal(subject)}>
+                            <FiInfo size={16} />
+                            리뷰 상세
+                          </MoreButton>
+                          <AddButton onClick={() => handleAddSubject(subject)}>
+                            <FiPlus size={16} />
+                            시간표에 추가
+                          </AddButton>
+                        </ButtonGroup>
+                      </CourseFooter>
+                    </CourseCard>
+                  );
+                })}
+                
+              {/* 유사 과목들을 아래에 표시 - 중복 제거 */}
+              {recommendationResult.subjects
+                .filter(subject => !isPerfectMatch(subject))
+                .filter((subject, index, array) => {
+                  // 중복 제거: 같은 과목 코드 + 교수 + 시간의 첫 번째 항목만 유지
+                  return array.findIndex(s => 
+                    s.code === subject.code && 
+                    s.professor === subject.professor && 
+                    JSON.stringify(s.schedules) === JSON.stringify(subject.schedules)
+                  ) === index;
+                })
+                .map(subject => {
+                  const rating = calculateSubjectRating(subject);
+                  
+                  return (
+                    <CourseCard key={`similar-${subject.code}-${subject.professor}-${subject.schedules.map((s: any) => `${s.day}-${s.startTime}-${s.endTime}`).join('-')}`}>
+                      <CourseHeader>
+                        <CourseCode>{subject.code}</CourseCode>
+                        <CourseBadge color="#FFF3CD">
+                          <FiInfo size={12} style={{ marginRight: '4px' }} />
+                          유사 과목
+                        </CourseBadge>
+                      </CourseHeader>
+                      <CourseBody>
+                        <CourseName>{subject.name}</CourseName>
+                        <CourseDetail>
+                          <FiUser size={14} />
+                          <span>{subject.professor}</span>
+                        </CourseDetail>
+                        <CourseDetail>
+                          <FiBook size={14} />
+                          <span>{subject.credits} 학점</span>
+                        </CourseDetail>
+                        <CourseDetail>
+                          <FiClock size={14} />
+                          <span>{formatScheduleString(subject.schedules)}</span>
+                        </CourseDetail>
+                        {subject.classroom && (
+                          <CourseDetail>
+                            <FiMapPin size={14} />
+                            <span>{subject.classroom}</span>
+                          </CourseDetail>
+                        )}
+                        
+                        {/* 과목 설명 */}
+                        <CourseDescription>
+                          <FiInfo size={14} />
+                          <span>
+                            {(() => {
+                              const description = getCourseDescription(subject.code);
+                              return description.length > 100
+                                ? `${description.substring(0, 100)}...`
+                                : description;
+                            })()}
+                          </span>
+                        </CourseDescription>
+                        
+                        {/* 과목 평점 표시 (있는 경우에만) */}
+                        {rating && (
+                          <RatingSection>
+                            <RatingTitle>강의 평가 ({rating.reviewCount}명)</RatingTitle>
+                            <RatingGrid>
+                              <RatingItem>
+                                <RatingLabel>
+                                  <FiStar size={12} />
+                                  <span>학점</span>
+                                  <RatingValue color={getRatingColor(rating.grade)}>
+                                    {rating.grade}
+                                  </RatingValue>
+                                </RatingLabel>
+                              </RatingItem>
+                              <RatingItem>
+                                <RatingLabel>
+                                  <FiActivity size={12} />
+                                  <span>로드</span>
+                                  <RatingValue color={getRatingColor(rating.workload)}>
+                                    {rating.workload}
+                                  </RatingValue>
+                                </RatingLabel>
+                              </RatingItem>
+                              <RatingItem>
+                                <RatingLabel>
+                                  <FiBookOpen size={12} />
+                                  <span>강의</span>
+                                  <RatingValue color={getRatingColor(rating.teaching)}>
+                                    {rating.teaching}
+                                  </RatingValue>
+                                </RatingLabel>
+                              </RatingItem>
+                            </RatingGrid>
+                          </RatingSection>
+                        )}
+                      </CourseBody>
+                      <CourseFooter>
+                        <ButtonGroup>
+                          <MoreButton onClick={() => openSubjectModal(subject)}>
+                            <FiInfo size={16} />
+                            리뷰 상세
+                          </MoreButton>
+                          <AddButton onClick={() => handleAddSubject(subject)}>
+                            <FiPlus size={16} />
+                            시간표에 추가
+                          </AddButton>
+                        </ButtonGroup>
+                      </CourseFooter>
+                    </CourseCard>
+                  );
+                })}
             </SubjectList>
           </RecommendationSection>
         )}
@@ -1200,7 +1441,7 @@ const MoreButton = styled.button`
   }
 `;
 
-// 모달 관련 스타일
+// 모달 관련 스타일 - 기존과 동일하므로 생략 (길이 제한으로 인해)
 const Modal = styled.div`
   position: fixed;
   top: 0;
